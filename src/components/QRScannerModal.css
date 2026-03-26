@@ -1,0 +1,119 @@
+.scanner-modal {
+    max-width: 500px;
+    width: 100%;
+    padding: 2rem;
+}
+
+.scanner-wrapper {
+    position: relative;
+    width: 100%;
+    min-height: 300px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+/* Styles to override internal html5-qrcode styles for a cleaner look */
+#reader {
+    border: none !important;
+    border-radius: 12px;
+}
+
+#reader__scan_region {
+    background: transparent !important;
+}
+
+#reader__dashboard_section_csr span, #reader__dashboard_section_swaplink {
+    color: white !important;
+}
+
+#reader button {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    margin: 0.5rem;
+}
+
+.scan-error {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    background: rgba(239, 68, 68, 0.9);
+    backdrop-filter: blur(4px);
+    padding: 1rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.scan-success {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.success-icon-large {
+    color: #10b981;
+    margin-bottom: 1rem;
+}
+
+.scan-success h3 {
+    font-size: 1.5rem;
+    color: #10b981;
+    margin-bottom: 1.5rem;
+}
+
+.attendee-info-card {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 100%;
+    text-align: left;
+}
+
+.attendee-info-card p {
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.room-direction {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px dashed rgba(255,255,255,0.2);
+    text-align: center;
+}
+
+.room-direction span {
+    color: #94a3b8;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.room-direction h4 {
+    font-size: 2rem;
+    color: #60a5fa;
+    margin: 0.5rem 0;
+    text-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
+}
+
+.room-direction p {
+    color: #cbd5e1;
+    margin-bottom: 0;
+}
