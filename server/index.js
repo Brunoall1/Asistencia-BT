@@ -8,7 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // ==========================================
 // SYSTEM CONFIG / AUTH ROUTES
@@ -251,8 +251,6 @@ app.post('/api/events/:eventId/rooms/:roomId/sessions', async (req, res) => {
     }
 });
 
-const path = require('path');
-
 // Serve static files from the React frontend build
 app.use(express.static(path.join(__dirname, '../dist')));
 
@@ -262,13 +260,7 @@ app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-app.use(express.static(path.join(__dirname, '../dist')));
-
-app.get(/.*/, (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
-});
-
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
