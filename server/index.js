@@ -66,12 +66,12 @@ app.post('/api/events', async (req, res) => {
     const { name, expected_forum, rooms_count } = req.body;
     const id = uuidv4();
     const accessCode = generateAccessCode();
-    
+
     try {
-        await db.run(`INSERT INTO events (id, name, expected_forum, rooms_count, access_code) VALUES (?, ?, ?, ?, ?)`, 
+        await db.run(`INSERT INTO events (id, name, expected_forum, rooms_count, access_code) VALUES (?, ?, ?, ?, ?)`,
             [id, name, expected_forum, rooms_count, accessCode]
         );
-        res.json({ success: true, event: { id, name, expected_forum, rooms_count, access_code: accessCode }});
+        res.json({ success: true, event: { id, name, expected_forum, rooms_count, access_code: accessCode } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -110,12 +110,12 @@ app.post('/api/events/:eventId/rooms', async (req, res) => {
     const { name, conference_name, expected_capacity } = req.body;
     const event_id = req.params.eventId;
     const id = uuidv4();
-    
+
     try {
-        await db.run(`INSERT INTO rooms (id, event_id, name, conference_name, expected_capacity) VALUES (?, ?, ?, ?, ?)`, 
+        await db.run(`INSERT INTO rooms (id, event_id, name, conference_name, expected_capacity) VALUES (?, ?, ?, ?, ?)`,
             [id, event_id, name, conference_name, expected_capacity || 0]
         );
-        res.json({ success: true, room: { id, event_id, name, conference_name, expected_capacity }});
+        res.json({ success: true, room: { id, event_id, name, conference_name, expected_capacity } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -143,14 +143,14 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
     const event_id = req.params.eventId;
     const id = uuidv4();
     const qr_code = uuidv4(); // Unique string for QR
-    
+
     try {
         await db.run(
             `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, payment_method, qr_code) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, event_id, room_id, first_name, last_name, email, payment_method, qr_code]
         );
-        res.json({ success: true, attendee: { id, event_id, room_id, first_name, last_name, email, payment_method, qr_code }});
+        res.json({ success: true, attendee: { id, event_id, room_id, first_name, last_name, email, payment_method, qr_code } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -160,7 +160,7 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
 app.put('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
     const { room_id, first_name, last_name, email, payment_method } = req.body;
     const { eventId, attendeeId } = req.params;
-    
+
     try {
         await db.run(
             `UPDATE attendees SET room_id = ?, first_name = ?, last_name = ?, email = ?, payment_method = ? 
@@ -177,20 +177,20 @@ app.put('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
 app.put('/api/events/:eventId/attendees/scan', async (req, res) => {
     const { qr_code } = req.body;
     const event_id = req.params.eventId;
-    
+
     try {
         const attendee = await db.get(`SELECT * FROM attendees WHERE qr_code = ? AND event_id = ?`, [qr_code, event_id]);
         if (!attendee) {
             return res.status(404).json({ success: false, message: 'Attendee not found for this event' });
         }
-        
+
         const arrival_time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        
+
         await db.run(`UPDATE attendees SET has_arrived = 1, arrival_time = ? WHERE id = ?`, [arrival_time, attendee.id]);
-        
+
         // Fetch the room info for display
         const room = await db.get(`SELECT name, conference_name FROM rooms WHERE id = ?`, [attendee.room_id]);
-        
+
         res.json({ success: true, attendee: { ...attendee, has_arrived: 1, arrival_time }, room });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -201,17 +201,17 @@ app.put('/api/events/:eventId/attendees/scan', async (req, res) => {
 app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) => {
     const attendeeId = req.params.attendeeId;
     const event_id = req.params.eventId;
-    
+
     try {
         const attendee = await db.get(`SELECT * FROM attendees WHERE id = ? AND event_id = ?`, [attendeeId, event_id]);
         if (!attendee) {
             return res.status(404).json({ success: false, message: 'Attendee not found' });
         }
-        
+
         const arrival_time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        
+
         await db.run(`UPDATE attendees SET has_arrived = 1, arrival_time = ? WHERE id = ?`, [arrival_time, attendeeId]);
-        
+
         res.json({ success: true, attendee: { ...attendee, has_arrived: 1, arrival_time } });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -237,7 +237,7 @@ app.post('/api/events/:eventId/rooms/:roomId/sessions', async (req, res) => {
     const { name, speaker, start_time, end_time } = req.body;
     const { eventId, roomId } = req.params;
     const id = uuidv4();
-    
+
     try {
         await db.run(
             `INSERT INTO sessions (id, event_id, room_id, name, speaker, start_time, end_time) 
@@ -257,7 +257,7 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 // The "catchall" handler: for any request that doesn't
 // match one of the API routes, send back React's index.html file.
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
