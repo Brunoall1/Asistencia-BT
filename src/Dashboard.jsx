@@ -6,7 +6,7 @@ import axios from 'axios';
 import './Dashboard.css';
 import QRScannerModal from './components/QRScannerModal';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {

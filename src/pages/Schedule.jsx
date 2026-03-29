@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Clock, User, Plus, X } from 'lucide-react';
 import './Schedule.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const Schedule = () => {
     const { eventId } = useParams();

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { X, CheckCircle, XCircle } from 'lucide-react';
 import './QRScannerModal.css'; // Let's style it
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const QRScannerModal = ({ eventId, onClose }) => {
     const [scanResult, setScanResult] = useState(null);
@@ -53,7 +53,7 @@ const QRScannerModal = ({ eventId, onClose }) => {
                 </button>
                 <h2>Escáner de Asistencia</h2>
                 <p>Escanea el código QR del asistente para registrar su llegada y ver a qué salón debe dirigirse.</p>
-                
+
                 {!scanResult ? (
                     <div className="scanner-wrapper">
                         <div id="reader"></div>
@@ -71,14 +71,14 @@ const QRScannerModal = ({ eventId, onClose }) => {
                         <div className="attendee-info-card">
                             <p><strong>Asistente:</strong> {scanResult.attendee.first_name} {scanResult.attendee.last_name}</p>
                             <p><strong>Hora de llegada:</strong> {scanResult.attendee.arrival_time}</p>
-                            
+
                             <div className="room-direction">
                                 <span>Dirigirse a:</span>
                                 <h4>{scanResult.room.name}</h4>
                                 <p>({scanResult.room.conference_name})</p>
                             </div>
                         </div>
-                        <button 
+                        <button
                             className="primary-btn mt-4 full-width"
                             onClick={() => {
                                 setScanResult(null);

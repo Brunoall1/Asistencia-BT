@@ -4,12 +4,12 @@ import axios from 'axios';
 import { ArrowLeft, UserPlus, Pencil, Trash2, Search, Mail, Clock, CreditCard, QrCode } from 'lucide-react';
 import './AttendeeList.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const AttendeeList = () => {
     // Note: The route is /event/:eventId/attendees/:courseId where courseId is the room ID. 
     // Wait, the router path is `/event/:eventId/attendees/:courseId`.
-    const { eventId, courseId: roomId } = useParams(); 
+    const { eventId, courseId: roomId } = useParams();
     const navigate = useNavigate();
 
     const [attendees, setAttendees] = useState([]);
@@ -122,8 +122,8 @@ const AttendeeList = () => {
     const handleDelete = (id) => {
         // DELETE log: not included in backend request.
         if (window.confirm('La eliminación requiere una ruta DELETE en backend. ¿Omitir por ahora?')) {
-             // Fake delete from UI
-             setAttendees(attendees.filter(att => att.id !== id));
+            // Fake delete from UI
+            setAttendees(attendees.filter(att => att.id !== id));
         }
     };
 
@@ -163,13 +163,13 @@ const AttendeeList = () => {
                     />
                 </div>
                 <div className="stats" style={{ display: 'flex', gap: '2rem' }}>
-                    <span>Llegadas: <strong style={{color: '#10b981'}}>{attendees.filter(a => a.has_arrived).length} / {roomInfo?.expected_capacity || 0}</strong> aforo esperado</span>
+                    <span>Llegadas: <strong style={{ color: '#10b981' }}>{attendees.filter(a => a.has_arrived).length} / {roomInfo?.expected_capacity || 0}</strong> aforo esperado</span>
                     <span>Total Registrados: <strong>{attendees.length}</strong></span>
                 </div>
             </div>
 
             {loading ? (
-                <div style={{color:'white', padding: '2rem'}}>Cargando asistentes...</div>
+                <div style={{ color: 'white', padding: '2rem' }}>Cargando asistentes...</div>
             ) : (
                 <div className="table-wrapper">
                     <table className="attendee-table">
@@ -207,7 +207,7 @@ const AttendeeList = () => {
                                         </td>
                                         <td>
                                             {att.has_arrived ? (
-                                                <div className="time-badge" style={{background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)'}}>
+                                                <div className="time-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
                                                     <Clock size={14} />
                                                     {att.arrival_time}
                                                 </div>
@@ -226,7 +226,7 @@ const AttendeeList = () => {
                                         <td>
                                             <div className="action-buttons">
                                                 {!att.has_arrived && (
-                                                    <button className="edit-btn" style={{background: 'rgba(16, 185, 129, 0.2)', color: '#10b981'}} onClick={() => handleCheckIn(att.id)} title="Marcar Llegada Manual">
+                                                    <button className="edit-btn" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }} onClick={() => handleCheckIn(att.id)} title="Marcar Llegada Manual">
                                                         <Clock size={16} />
                                                     </button>
                                                 )}
@@ -279,7 +279,7 @@ const AttendeeList = () => {
                             </div>
                             <div className="modal-actions mt-4">
                                 <button type="button" className="cancel-btn" onClick={closeModal}>Cancelar</button>
-                                <button type="submit" className="primary-btn" style={{padding: '0.75rem 1.5rem'}}>
+                                <button type="submit" className="primary-btn" style={{ padding: '0.75rem 1.5rem' }}>
                                     {editingId ? 'Actualizar' : 'Guardar y Generar QR'}
                                 </button>
                             </div>
