@@ -187,12 +187,12 @@ app.put('/api/events/:eventId/attendees/scan', async (req, res) => {
 
         const arrival_time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
-        await db.run(`UPDATE attendees SET has_arrived = 1, arrival_time = ? WHERE id = ?`, [arrival_time, attendee.id]);
+        await db.run(`UPDATE attendees SET has_arrived = TRUE, arrival_time = ? WHERE id = ?`, [arrival_time, attendee.id]);
 
         // Fetch the room info for display
         const room = await db.get(`SELECT name, conference_name FROM rooms WHERE id = ?`, [attendee.room_id]);
 
-        res.json({ success: true, attendee: { ...attendee, has_arrived: 1, arrival_time }, room });
+        res.json({ success: true, attendee: { ...attendee, has_arrived: true, arrival_time }, room });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -211,9 +211,9 @@ app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) =
 
         const arrival_time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
-        await db.run(`UPDATE attendees SET has_arrived = 1, arrival_time = ? WHERE id = ?`, [arrival_time, attendeeId]);
+        await db.run(`UPDATE attendees SET has_arrived = TRUE, arrival_time = ? WHERE id = ?`, [arrival_time, attendeeId]);
 
-        res.json({ success: true, attendee: { ...attendee, has_arrived: 1, arrival_time } });
+        res.json({ success: true, attendee: { ...attendee, has_arrived: true, arrival_time } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
