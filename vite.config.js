@@ -5,4 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/', // Usar barra para producción en el dominio raíz (arregla el error de pantalla en blanco en sub-rutas)
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3001'
+    }
+  }
 })

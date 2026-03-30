@@ -6,6 +6,8 @@ import AttendeeList from './pages/AttendeeList';
 import Home from './pages/Home';
 import CreateEvent from './pages/CreateEvent';
 import AccessEvent from './pages/AccessEvent';
+import AdminEventsList from './pages/AdminEventsList';
+import AdminEventDetails from './pages/AdminEventDetails';
 
 function App() {
   return (
@@ -15,6 +17,9 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/create-event" element={<CreateEvent />} />
           <Route path="/access-event" element={<AccessEvent />} />
+          
+          <Route path="/admin/events" element={<AdminEventsList />} />
+          <Route path="/admin/events/:eventId" element={<AdminEventDetails />} />
           
           <Route path="/event/:eventId" element={<Outlet />}>
             <Route index element={<Dashboard />} />

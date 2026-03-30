@@ -29,12 +29,21 @@ app.post('/api/auth/verify-master', async (req, res) => {
     }
 });
 
+// Verify master password mid-request helper
+const verifyMasterPW = async (password) => {
+    const row = await db.get(`SELECT key_value FROM system_config WHERE key_name = 'master_password'`);
+    return row && row.key_value === password;
+};
+
 // Update master password
-app.put('/api/auth/master-password', async (req, res) => {
-    const { newPassword } = req.body;
+app.put('/api/auth/update-password', async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
     try {
+        if (!await verifyMasterPW(currentPassword)) {
+            return res.status(401).json({ success: false, message: 'La contraseña actual es incorrecta' });
+        }
         await db.run(`UPDATE system_config SET key_value = ? WHERE key_name = 'master_password'`, [newPassword]);
-        res.json({ success: true, message: 'Master password updated' });
+        res.json({ success: true, message: 'Contraseña actualizada exitosamente' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -246,6 +255,59 @@ app.post('/api/events/:eventId/rooms/:roomId/sessions', async (req, res) => {
             [id, eventId, roomId, name, speaker, start_time, end_time]
         );
         res.json({ success: true, session: { id, event_id: eventId, room_id: roomId, name, speaker, start_time, end_time } });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// ADMIN DASHBOARD ROUTES
+// ==========================================
+
+// Get all events with aggregated stats for admin list
+app.post('/api/admin/events', async (req, res) => {
+    const { password } = req.body;
+    try {
+        if (!await verifyMasterPW(password)) return res.status(401).json({ success: false, message: 'No autorizado' });
+        
+        const events = await db.all(`
+            SELECT 
+                e.id, 
+                e.name, 
+                e.access_code, 
+                (SELECT COUNT(*) FROM rooms WHERE event_id = e.id) as real_rooms_count,
+                (SELECT COUNT(*) FROM attendees WHERE event_id = e.id AND has_arrived = TRUE) as arrived_attendees
+            FROM events e
+            ORDER BY e.created_at DESC
+        `);
+        res.json({ success: true, events });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get specific event room stats for admin details
+app.post('/api/admin/events/:eventId', async (req, res) => {
+    const { password } = req.body;
+    const { eventId } = req.params;
+    try {
+        if (!await verifyMasterPW(password)) return res.status(401).json({ success: false, message: 'No autorizado' });
+        
+        const event = await db.get(`SELECT id, name, access_code FROM events WHERE id = ?`, [eventId]);
+        if (!event) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+
+        const rooms = await db.all(`
+            SELECT 
+                r.id, 
+                r.name, 
+                r.conference_name, 
+                r.expected_capacity,
+                (SELECT COUNT(*) FROM attendees WHERE room_id = r.id AND has_arrived = TRUE) as arrived_attendees
+            FROM rooms r
+            WHERE r.event_id = ?
+        `, [eventId]);
+
+        res.json({ success: true, event, rooms });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

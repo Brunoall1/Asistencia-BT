@@ -178,6 +178,8 @@
 
 .create-card .card-icon { color: #60a5fa; }
 .access-card .card-icon { color: #c084fc; }
+.list-card .card-icon { color: #10b981; }
+.pwd-card .card-icon { color: #f43f5e; }
 
 .action-card h3 {
     font-size: 1.75rem;
@@ -189,6 +191,47 @@
     color: #cbd5e1;
     line-height: 1.6;
     font-size: 1rem;
+}
+
+.list-card:hover {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.list-card:hover .card-icon-wrapper {
+    background: rgba(16, 185, 129, 0.2);
+    transform: scale(1.1);
+}
+
+.pwd-card:hover {
+    background: rgba(244, 63, 94, 0.1);
+}
+
+.pwd-card:hover .card-icon-wrapper {
+    background: rgba(244, 63, 94, 0.2);
+    transform: scale(1.1);
+}
+
+/* Modal styles for Home */
+.pwd-modal-container {
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border-radius: 24px;
+  padding: 2.5rem;
+  width: 90%;
+  max-width: 450px;
+  position: relative;
+  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  backdrop-filter: blur(20px);
+}
+
+.pwd-modal-container h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: #f8fafc;
+    text-align: center;
 }
 
 @media (max-width: 768px) {
