@@ -163,7 +163,7 @@ const AttendeeList = () => {
                     />
                 </div>
                 <div className="stats" style={{ display: 'flex', gap: '2rem' }}>
-                    <span>Llegadas: <strong style={{ color: '#10b981' }}>{attendees.filter(a => a.has_arrived).length} / {roomInfo?.expected_capacity || 0}</strong> aforo esperado</span>
+                    <span>Llegadas: <strong style={{ color: '#10b981' }}>{attendees.filter(a => !!a.has_arrived).length} / {roomInfo ? roomInfo.expected_capacity : 0}</strong> aforo esperado</span>
                     <span>Total Registrados: <strong>{attendees.length}</strong></span>
                 </div>
             </div>
