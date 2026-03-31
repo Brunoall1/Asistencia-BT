@@ -33,14 +33,14 @@ const AttendeeList = () => {
         try {
             const res = await axios.get(`${API_URL}/events/${eventId}/attendees`);
             if (res.data.success) {
-                // Filter by the specific room
-                const roomAttendees = res.data.attendees.filter(att => att.room_id === roomId);
+                // Filter by the specific room (cast to String to avoid strict equality issues between number/string)
+                const roomAttendees = res.data.attendees.filter(att => String(att.room_id) === String(roomId));
                 setAttendees(roomAttendees);
             }
 
             const roomsRes = await axios.get(`${API_URL}/events/${eventId}/rooms`);
             if (roomsRes.data.success) {
-                const currentRoom = roomsRes.data.rooms.find(r => r.id === roomId);
+                const currentRoom = roomsRes.data.rooms.find(r => String(r.id) === String(roomId));
                 setRoomInfo(currentRoom);
             }
         } catch (err) {
