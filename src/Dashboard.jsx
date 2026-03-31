@@ -33,6 +33,8 @@ const Dashboard = () => {
     const [showQRModal, setShowQRModal] = useState(false);
     const [showAccessCode, setShowAccessCode] = useState(false);
     const [newRoomData, setNewRoomData] = useState({ name: '', conference: '', expected_capacity: '' });
+    const [qrPrefill, setQrPrefill] = useState(null);
+    const [isFetchingUrl, setIsFetchingUrl] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const fetchData = async () => {
@@ -118,6 +120,96 @@ const Dashboard = () => {
             }
         } catch (err) {
             console.error('Error adding room:', err);
+        }
+    };
+
+    const handleQRScanned = async (decodedText) => {
+        setShowQRModal(false); // Close scanner immediately
+        
+        let textToParse = decodedText;
+        
+        // Check if QR is a URL
+        if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+            setIsFetchingUrl(true);
+            try {
+                const scrapeRes = await axios.post(`${API_URL}/utils/scrape`, { url: decodedText });
+                if (scrapeRes.data.success) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(scrapeRes.data.html, 'text/html');
+                    // Extract text but retain some inner spacing
+                    textToParse = doc.body.innerText || decodedText;
+                }
+            } catch (err) {
+                console.error("Error scraping QR link:", err);
+            }
+            setIsFetchingUrl(false);
+        }
+        
+        let roomId = '';
+        let firstName = '';
+        let lastName = '';
+        
+        // Advanced Custom Regex based on typical ticket platforms like BrandingTicket
+        // Pattern: "Nombre: [Rest of the line]"
+        const nombreMatch = textToParse.match(/Nombre:\s*([^\n\r]+)/i);
+        if (nombreMatch) {
+            const rawName = nombreMatch[1].trim();
+            // Split name nicely: "Blanca Dubuc de Quintana" -> Blanca (First), Dubuc de Quintana (Last)
+            const parts = rawName.split(/\s+/).filter(Boolean);
+            firstName = parts[0] || '';
+            lastName = parts.slice(1).join(' ') || '';
+        } else {
+            // Fallback generic parse logic
+            let genericName = textToParse.replace(/nombre:|name:|sala:|room:|-|,|;/ig, ' ').trim();
+            const sortedRooms = [...rooms].sort((a,b) => b.name.length - a.name.length);
+            for (const r of sortedRooms) {
+                if (genericName.toLowerCase().includes(r.name.toLowerCase())) {
+                    genericName = genericName.replace(new RegExp(r.name, 'ig'), '').trim();
+                }
+            }
+            const parts = genericName.split(/\s+/).filter(Boolean);
+            firstName = parts[0] || '';
+            lastName = parts.slice(1).join(' ') || '';
+        }
+        
+        // Pattern for Rooms: Try to match from the parsed text text
+        const sortedRooms = [...rooms].sort((a,b) => b.name.length - a.name.length);
+        for (const r of sortedRooms) {
+            if (textToParse.toLowerCase().includes(r.name.toLowerCase())) {
+                roomId = r.id;
+                break;
+            }
+        }
+        
+        setQrPrefill({
+            first_name: firstName,
+            last_name: lastName,
+            email: '',
+            payment_method: 'Efectivo',
+            room_id: roomId
+        });
+    };
+
+    const handleSaveQRAttendee = async (e) => {
+        e.preventDefault();
+        try {
+            if (!qrPrefill.room_id) {
+                alert('Por favor selecciona una sala para este asistente.');
+                return;
+            }
+            // Create attendee
+            const res = await axios.post(`${API_URL}/events/${eventId}/attendees`, qrPrefill);
+            if (res.data.success) {
+                const newId = res.data.attendee.id;
+                // Automatically mark as arrived
+                await axios.put(`${API_URL}/events/${eventId}/attendees/${newId}/arrival`);
+                
+                setQrPrefill(null);
+                fetchData(); // Refresh metrics
+            }
+        } catch (err) {
+            console.error('Error adding from QR:', err);
+            alert('Hubo un error al guardar el asistente.');
         }
     };
 
@@ -282,7 +374,64 @@ const Dashboard = () => {
                 <QRScannerModal
                     eventId={eventId}
                     onClose={() => setShowQRModal(false)}
+                    onScanSuccess={handleQRScanned}
                 />
+            )}
+
+            {isFetchingUrl && (
+                <div className="modal-overlay">
+                    <div className="modal-content" style={{ background: '#1e293b', padding: '3rem', borderRadius: '16px', textAlign: 'center', maxWidth: '400px' }}>
+                        <h2 className="gradient-text" style={{ margin: 0, marginBottom: '1rem' }}>Extrayendo Información...</h2>
+                        <p style={{ color: '#94a3b8' }}>Descargando perfil del asistente desde el código QR. Por favor espera.</p>
+                    </div>
+                </div>
+            )}
+
+            {qrPrefill && (
+                <div className="modal-overlay" onClick={() => setQrPrefill(null)}>
+                    <div className="modal-content" style={{ background: '#1e293b', padding: '2rem', borderRadius: '16px', width: '100%', maxWidth: '500px', border: '1px solid rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
+                            <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Nuevo Asistente (QR)</h2>
+                            <button className="close-btn" onClick={() => setQrPrefill(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+                        </div>
+                        <form onSubmit={handleSaveQRAttendee} className="crud-form" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Nombre</label>
+                                    <input type="text" value={qrPrefill.first_name} onChange={e => setQrPrefill({...qrPrefill, first_name: e.target.value})} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}/>
+                                </div>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Apellido</label>
+                                    <input type="text" value={qrPrefill.last_name} onChange={e => setQrPrefill({...qrPrefill, last_name: e.target.value})} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}/>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Sala Destino</label>
+                                <select value={qrPrefill.room_id} onChange={e => setQrPrefill({...qrPrefill, room_id: e.target.value})} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
+                                    <option value="">Seleccionar Sala...</option>
+                                    {rooms.map(r => <option value={r.id} key={r.id}>{r.name}</option>)}
+                                </select>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Correo Electrónico (Opcional)</label>
+                                <input type="email" value={qrPrefill.email} onChange={e => setQrPrefill({...qrPrefill, email: e.target.value})} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}/>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Método de Pago</label>
+                                <select value={qrPrefill.payment_method} onChange={e => setQrPrefill({...qrPrefill, payment_method: e.target.value})} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Tarjeta">Tarjeta</option>
+                                    <option value="Transferencia">Transferencia</option>
+                                    <option value="Beca">Beca</option>
+                                </select>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                                <button type="button" onClick={() => setQrPrefill(null)} style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                                <button type="submit" style={{ padding: '0.75rem 1.5rem', background: '#3b82f6', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Guardar e Ingresar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
         </div>
     );

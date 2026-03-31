@@ -1,5 +1,6 @@
 .home-container {
-    min-height: calc(100vh - 80px); /* Adjusting for possible header/nav */
+    min-height: calc(100vh - 80px);
+    /* Adjusting for possible header/nav */
     width: 100%;
     display: flex;
     align-items: center;
@@ -28,7 +29,7 @@
 .glow-1 {
     width: 40vw;
     height: 40vw;
-    background: radial-gradient(circle, rgba(59,130,246,0.4) 0%, rgba(30,58,138,0) 70%);
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, rgba(30, 58, 138, 0) 70%);
     top: -10%;
     left: -10%;
 }
@@ -36,7 +37,7 @@
 .glow-2 {
     width: 35vw;
     height: 35vw;
-    background: radial-gradient(circle, rgba(139,92,246,0.4) 0%, rgba(76,29,149,0) 70%);
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, rgba(76, 29, 149, 0) 70%);
     bottom: -10%;
     right: -10%;
     animation-delay: -5s;
@@ -45,15 +46,20 @@
 .glow-3 {
     width: 30vw;
     height: 30vw;
-    background: radial-gradient(circle, rgba(16,185,129,0.3) 0%, rgba(6,78,59,0) 70%);
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, rgba(6, 78, 59, 0) 70%);
     top: 40%;
     left: 40%;
     animation-delay: -10s;
 }
 
 @keyframes drift {
-    0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(10%, 10%) scale(1.1); }
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    100% {
+        transform: translate(10%, 10%) scale(1.1);
+    }
 }
 
 .home-content {
@@ -63,6 +69,7 @@
     max-width: 1000px;
     width: 90%;
     padding: 2rem;
+    padding-top: 0;
     z-index: 10;
 }
 
@@ -73,8 +80,15 @@
 }
 
 @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .logo-container {
@@ -82,9 +96,20 @@
     padding: 1rem;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 24px;
-    margin-bottom: 1.5rem;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.home-brand-logo {
+    height: 70px;
+    object-fit: contain;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(237, 13, 13, 0.5);
+    /* Using the customized red shadow */
+    -webkit-mask-image: -webkit-radial-gradient(center, ellipse cover, black 65%, rgba(0, 0, 0, 0) 100%);
+    mask-image: radial-gradient(ellipse at center, black 65%, transparent 100%);
+    opacity: 0.95;
+    transition: all 0.3s ease;
 }
 
 .logo-icon {
@@ -176,10 +201,21 @@
     transition: all 0.3s ease;
 }
 
-.create-card .card-icon { color: #60a5fa; }
-.access-card .card-icon { color: #c084fc; }
-.list-card .card-icon { color: #10b981; }
-.pwd-card .card-icon { color: #f43f5e; }
+.create-card .card-icon {
+    color: #60a5fa;
+}
+
+.access-card .card-icon {
+    color: #c084fc;
+}
+
+.list-card .card-icon {
+    color: #10b981;
+}
+
+.pwd-card .card-icon {
+    color: #f43f5e;
+}
 
 .action-card h3 {
     font-size: 1.75rem;
@@ -213,16 +249,16 @@
 
 /* Modal styles for Home */
 .pwd-modal-container {
-  background: rgba(30, 41, 59, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border-radius: 24px;
-  padding: 2.5rem;
-  width: 90%;
-  max-width: 450px;
-  position: relative;
-  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  backdrop-filter: blur(20px);
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    border-radius: 24px;
+    padding: 2.5rem;
+    width: 90%;
+    max-width: 450px;
+    position: relative;
+    animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    backdrop-filter: blur(20px);
 }
 
 .pwd-modal-container h2 {
@@ -235,7 +271,15 @@
 }
 
 @media (max-width: 768px) {
-    .home-title { font-size: 2.5rem; }
-    .home-subtitle { font-size: 1.1rem; }
-    .action-card { padding: 2rem 1.5rem; }
+    .home-title {
+        font-size: 2.5rem;
+    }
+
+    .home-subtitle {
+        font-size: 1.1rem;
+    }
+
+    .action-card {
+        padding: 2rem 1.5rem;
+    }
 }

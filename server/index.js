@@ -11,6 +11,30 @@ app.use(express.json());
 const PORT = process.env.PORT || 3001;
 
 // ==========================================
+// UTILITIES
+// ==========================================
+// Scrape external QR URLs to extract attendee info
+app.post('/api/utils/scrape', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+            return res.status(400).json({ success: false, message: 'Invalid URL' });
+        }
+        
+        // Use native fetch to get the HTML
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+        const text = await response.text();
+        res.json({ success: true, html: text });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ==========================================
 // SYSTEM CONFIG / AUTH ROUTES
 // ==========================================
 

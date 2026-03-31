@@ -1,49 +1,114 @@
-import React, { useEffect, useState } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import React, { useEffect, useState, useRef } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 import axios from 'axios';
-import { X, CheckCircle, XCircle } from 'lucide-react';
-import './QRScannerModal.css'; // Let's style it
+import { X, CheckCircle, XCircle, Camera, RefreshCcw } from 'lucide-react';
+import './QRScannerModal.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-const QRScannerModal = ({ eventId, onClose }) => {
+const QRScannerModal = ({ eventId, onClose, onScanSuccess }) => {
     const [scanResult, setScanResult] = useState(null);
     const [error, setError] = useState(null);
+    const [cameras, setCameras] = useState([]);
+    const [activeCameraId, setActiveCameraId] = useState(null);
+    
+    // We use a ref to hold the scanner instance so it survives re-renders
+    const scannerRef = useRef(null);
 
     useEffect(() => {
-        const scanner = new Html5QrcodeScanner("reader", {
-            qrbox: { width: 250, height: 250 },
-            fps: 5,
-        });
+        // Initialize scanner
+        scannerRef.current = new Html5Qrcode("reader");
 
-        scanner.render(async (decodedText) => {
-            // Success handler
-            scanner.pause();
-            try {
-                const res = await axios.put(`${API_URL}/events/${eventId}/attendees/scan`, {
-                    qr_code: decodedText
-                });
-
-                if (res.data.success) {
-                    setScanResult(res.data);
-                }
-            } catch (err) {
-                setError(err.response?.data?.message || 'Error procesando el código QR');
-                setTimeout(() => {
-                    setError(null);
-                    scanner.resume();
-                }, 3000);
+        // Request cameras
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                setCameras(devices);
+                // Try to find the back camera by default
+                const backCam = devices.find(d => 
+                    d.label.toLowerCase().includes('back') || 
+                    d.label.toLowerCase().includes('environment') || 
+                    d.label.toLowerCase().includes('trasera')
+                );
+                setActiveCameraId(backCam ? backCam.id : devices[0].id);
             }
-        }, (errorMessage) => {
-            // Error handler - ignore for continuous scanning
+        }).catch(err => {
+            console.error("Camera permissions failed", err);
+            setError("No se detectaron cámaras o faltan permisos.");
         });
 
         return () => {
-            scanner.clear().catch(error => {
-                console.error("Failed to clear html5QrcodeScanner. ", error);
-            });
+            if (scannerRef.current && scannerRef.current.isScanning) {
+                scannerRef.current.stop().catch(console.error);
+            }
         };
-    }, [eventId]);
+    }, []);
+
+    useEffect(() => {
+        if (activeCameraId && scannerRef.current) {
+            const startScanning = () => {
+                scannerRef.current.start(
+                    activeCameraId,
+                    {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 }
+                    },
+                    (decodedText) => {
+                        handleScan(decodedText);
+                    },
+                    (errorMessage) => {
+                        // ignore continous errors
+                    }
+                ).catch(err => {
+                    console.error("Error starting camera", err);
+                    setError("Error al iniciar cámara.");
+                });
+            };
+
+            if (scannerRef.current.isScanning) {
+                scannerRef.current.stop()
+                    .then(() => startScanning())
+                    .catch(console.error);
+            } else {
+                startScanning();
+            }
+        }
+    }, [activeCameraId]);
+
+    const handleScan = async (decodedText) => {
+        // Stop scanning to prevent multiple hits
+        if (scannerRef.current && scannerRef.current.isScanning) {
+            scannerRef.current.pause(true); // Pause if supported, or we just rely on state
+        }
+
+        if (onScanSuccess) {
+            onScanSuccess(decodedText);
+            return;
+        }
+
+        try {
+            const res = await axios.put(`${API_URL}/events/${eventId}/attendees/scan`, {
+                qr_code: decodedText
+            });
+
+            if (res.data.success) {
+                setScanResult(res.data);
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Error procesando el código QR');
+            setTimeout(() => {
+                setError(null);
+                if (scannerRef.current) scannerRef.current.resume();
+            }, 3000);
+        }
+    };
+
+    const switchCamera = () => {
+        if (cameras.length > 1) {
+            const currentIndex = cameras.findIndex(c => c.id === activeCameraId);
+            const nextIndex = (currentIndex + 1) % cameras.length;
+            setActiveCameraId(cameras[nextIndex].id);
+        }
+    };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -52,11 +117,17 @@ const QRScannerModal = ({ eventId, onClose }) => {
                     <X size={24} />
                 </button>
                 <h2>Escáner de Asistencia</h2>
-                <p>Escanea el código QR del asistente para registrar su llegada y ver a qué salón debe dirigirse.</p>
+                <p>Apunta el código QR con la cámara de tu dispositivo.</p>
 
                 {!scanResult ? (
                     <div className="scanner-wrapper">
-                        <div id="reader"></div>
+                        {cameras.length > 1 && (
+                            <button className="switch-camera-btn" onClick={switchCamera}>
+                                <RefreshCcw size={18} />
+                                Cambiar Cámara
+                            </button>
+                        )}
+                        <div id="reader" style={{ width: '100%', borderRadius: '12px', overflow: 'hidden' }}></div>
                         {error && (
                             <div className="scan-error">
                                 <XCircle size={20} />
@@ -82,8 +153,6 @@ const QRScannerModal = ({ eventId, onClose }) => {
                             className="primary-btn mt-4 full-width"
                             onClick={() => {
                                 setScanResult(null);
-                                // The scanner hook relies on remount to re-init properly in this simple implementation
-                                // or we can force close
                                 onClose();
                             }}
                         >

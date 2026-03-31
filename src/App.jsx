@@ -8,6 +8,7 @@ import CreateEvent from './pages/CreateEvent';
 import AccessEvent from './pages/AccessEvent';
 import AdminEventsList from './pages/AdminEventsList';
 import AdminEventDetails from './pages/AdminEventDetails';
+import AdminHome from './pages/AdminHome';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/admin" element={<AdminHome />} />
           <Route path="/create-event" element={<CreateEvent />} />
           <Route path="/access-event" element={<AccessEvent />} />
           

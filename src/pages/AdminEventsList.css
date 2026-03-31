@@ -1,5 +1,6 @@
 .admin-container {
-    padding: 3rem 2rem;
+    padding: 2rem;
+    padding-top: 0;
     min-height: 100vh;
     position: relative;
     color: white;
@@ -70,7 +71,7 @@
 .event-item-card:hover {
     transform: translateY(-5px);
     border-color: rgba(16, 185, 129, 0.4);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .event-card-header {
@@ -78,7 +79,7 @@
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 1.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     padding-bottom: 1rem;
 }
 
@@ -143,7 +144,7 @@
     font-size: 0.95rem;
     margin-top: auto;
     padding-top: 1rem;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* Empty state */
@@ -153,7 +154,7 @@
     padding: 4rem 2rem;
     border-radius: 20px;
     background: rgba(30, 41, 59, 0.4);
-    border: 1px dashed rgba(255,255,255,0.2);
+    border: 1px dashed rgba(255, 255, 255, 0.2);
 }
 
 @media (max-width: 768px) {
