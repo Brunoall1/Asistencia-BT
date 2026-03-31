@@ -218,7 +218,7 @@ app.put('/api/events/:eventId/attendees/scan', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Attendee not found for this event' });
         }
 
-        const arrival_time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const arrival_time = new Date().toLocaleTimeString('es-ES', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' });
 
         await db.run(`UPDATE attendees SET has_arrived = TRUE, arrival_time = ? WHERE id = ?`, [arrival_time, attendee.id]);
 
@@ -242,7 +242,7 @@ app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) =
             return res.status(404).json({ success: false, message: 'Attendee not found' });
         }
 
-        const arrival_time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const arrival_time = new Date().toLocaleTimeString('es-ES', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' });
 
         await db.run(`UPDATE attendees SET has_arrived = TRUE, arrival_time = ? WHERE id = ?`, [arrival_time, attendeeId]);
 
