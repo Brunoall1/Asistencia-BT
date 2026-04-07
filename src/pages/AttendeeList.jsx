@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ArrowLeft, UserPlus, Pencil, Trash2, Search, Mail, Clock, CreditCard, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import './AttendeeList.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -16,6 +17,7 @@ const AttendeeList = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [roomInfo, setRoomInfo] = useState(null);
+    const [showingQR, setShowingQR] = useState(null);
 
     // Modal / Form state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -230,7 +232,7 @@ const AttendeeList = () => {
                                                         <Clock size={16} />
                                                     </button>
                                                 )}
-                                                <button className="edit-btn" onClick={() => alert(`Código QR para escáner: ${att.qr_code}\n(En producción se generaría imagen QR con esto)`)} title="Ver QR de acceso">
+                                                <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
                                                     <QrCode size={16} />
                                                 </button>
                                                 <button className="delete-btn" onClick={() => handleDelete(att.id)} title="Eliminar">
@@ -280,10 +282,37 @@ const AttendeeList = () => {
                             <div className="modal-actions mt-4">
                                 <button type="button" className="cancel-btn" onClick={closeModal}>Cancelar</button>
                                 <button type="submit" className="primary-btn" style={{ padding: '0.75rem 1.5rem' }}>
-                                    {editingId ? 'Actualizar' : 'Guardar y Generar QR'}
+                                    {editingId ? 'Actualizar' : 'Guardar Participante'}
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* QR Scanner Display Modal */}
+            {showingQR && (
+                <div className="modal-overlay" onClick={() => setShowingQR(null)}>
+                    <div className="modal-content glass-panel" style={{ textAlign: 'center', padding: '3rem', maxWidth: '400px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
+                        <h2 style={{ color: 'white', marginBottom: '1.5rem', fontWeight: 'bold' }}>Pase de Acceso Único</h2>
+                        
+                        <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', display: 'inline-block', marginBottom: '1.5rem', border: '4px solid #3b82f6' }}>
+                            <QRCodeSVG 
+                                value={`${window.location.origin}/show/${showingQR.qr_code}`} 
+                                size={200}
+                                level={"Q"}
+                            />
+                        </div>
+                        
+                        <h3 style={{ color: '#cbd5e1', fontSize: '1.2rem', marginBottom: '0.5rem' }}>{showingQR.first_name} {showingQR.last_name}</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem' }}>Salón: {roomInfo?.name}</p>
+
+                        <button 
+                            style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.8rem 2rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%' }}
+                            onClick={() => setShowingQR(null)}
+                        >
+                            Cerrar
+                        </button>
                     </div>
                 </div>
             )}

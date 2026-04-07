@@ -9,6 +9,7 @@ import AccessEvent from './pages/AccessEvent';
 import AdminEventsList from './pages/AdminEventsList';
 import AdminEventDetails from './pages/AdminEventDetails';
 import AdminHome from './pages/AdminHome';
+import PublicCheckIn from './pages/PublicCheckIn';
 
 function App() {
   return (
@@ -23,6 +24,8 @@ function App() {
           <Route path="/admin/events" element={<AdminEventsList />} />
           <Route path="/admin/events/:eventId" element={<AdminEventDetails />} />
           
+          <Route path="/show/:qrCode" element={<PublicCheckIn />} />
+
           <Route path="/event/:eventId" element={<Outlet />}>
             <Route index element={<Dashboard />} />
             <Route path="schedule" element={<Schedule />} />

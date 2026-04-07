@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const db = require('./database');
 const path = require('path');
 
@@ -176,7 +177,7 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
     const { room_id, first_name, last_name, email, payment_method } = req.body;
     const event_id = req.params.eventId;
     const id = uuidv4();
-    const qr_code = uuidv4(); // Unique string for QR
+    const qr_code = crypto.createHash('md5').update(id + event_id + Date.now().toString()).digest('hex');
 
     try {
         await db.run(
@@ -245,6 +246,49 @@ app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) =
         const arrival_time = new Date().toLocaleTimeString('es-ES', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' });
 
         await db.run(`UPDATE attendees SET has_arrived = TRUE, arrival_time = ? WHERE id = ?`, [arrival_time, attendeeId]);
+
+        res.json({ success: true, attendee: { ...attendee, has_arrived: true, arrival_time } });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// PUBLIC QR CHECK-IN ROUTES
+// ==========================================
+
+// Get attendee info via QR Code (MD5)
+app.get('/api/public/attendee/:qrCode', async (req, res) => {
+    try {
+        const attendee = await db.get(`
+            SELECT a.*, r.name as room_name, e.name as event_name 
+            FROM attendees a
+            JOIN rooms r ON a.room_id = r.id
+            JOIN events e ON a.event_id = e.id
+            WHERE a.qr_code = ?
+        `, [req.params.qrCode]);
+
+        if (!attendee) {
+            return res.status(404).json({ success: false, message: 'QR Code inválido o asistente no encontrado' });
+        }
+
+        res.json({ success: true, attendee });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Mark attendee as arrived publicly via QR Code (MD5)
+app.put('/api/public/attendee/:qrCode/arrival', async (req, res) => {
+    try {
+        const attendee = await db.get(`SELECT * FROM attendees WHERE qr_code = ?`, [req.params.qrCode]);
+        if (!attendee) {
+            return res.status(404).json({ success: false, message: 'Asistente no encontrado' });
+        }
+
+        const arrival_time = new Date().toLocaleTimeString('es-ES', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' });
+
+        await db.run(`UPDATE attendees SET has_arrived = TRUE, arrival_time = ? WHERE id = ?`, [arrival_time, attendee.id]);
 
         res.json({ success: true, attendee: { ...attendee, has_arrived: true, arrival_time } });
     } catch (err) {
