@@ -15,6 +15,7 @@ const AttendeeList = () => {
     const navigate = useNavigate();
 
     const [attendees, setAttendees] = useState([]);
+    const [filteredAttendees, setFilteredAttendees] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [roomInfo, setRoomInfo] = useState(null);
@@ -206,12 +207,6 @@ const AttendeeList = () => {
             setAttendees(attendees.filter(att => att.id !== id));
         }
     };
-
-    const filteredAttendees = attendees.filter(att =>
-        att.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        att.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (att.email && att.email.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
 
     return (
         <div className="attendee-container">
