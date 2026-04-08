@@ -80,7 +80,7 @@ const AttendeeList = () => {
             'Hora Llegada': att.has_arrived ? att.arrival_time : 'Aún no llega',
             'URL Validar Asistencia (Seguridad)': `${window.location.origin}/show/${att.qr_code}`
         }));
-        
+
         const ws = XLSX.utils.json_to_sheet(dataToExport);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Asistentes");
@@ -132,7 +132,7 @@ const AttendeeList = () => {
             }
         };
         reader.readAsBinaryString(file);
-        
+
         // Reset unmounted payload references so repeat uploads work flawlessly
         e.target.value = null;
     };
@@ -224,7 +224,7 @@ const AttendeeList = () => {
                     <h1>Asistentes del Salón {roomInfo?.name ? `- ${roomInfo.name}` : ''}</h1>
                     <p className="course-badge">Salón ID: {roomId}</p>
                 </div>
-                
+
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                     <input
                         type="file"
@@ -235,7 +235,7 @@ const AttendeeList = () => {
                     />
                     <button className="primary-btn" onClick={handleImportExcelClick} style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }} title="Subir lista en Excel (.xlsx)">
                         <Upload size={18} />
-                        Importar 
+                        Importar
                     </button>
                     <button className="primary-btn" onClick={handleExportExcel} style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)' }} title="Descargar vista actual en Excel">
                         <Download size={18} />
@@ -259,7 +259,7 @@ const AttendeeList = () => {
                     />
                 </div>
                 <div className="stats">
-                    <span>Llegadas: <strong style={{ color: '#10b981' }}>{safeArrivedCount} / {safeCapacity}</strong> aforo esperado</span>
+                    {/*  <pan>Llegadas: <strong style={{ color: '#10b981' }}>{safeArrivedCount} / {safeCapacity}</strong> aforo esperado</span--> */}
                     <span>Total Registrados: <strong>{attendees.length}</strong></span>
                 </div>
             </div>
@@ -389,19 +389,19 @@ const AttendeeList = () => {
                 <div className="modal-overlay" onClick={() => setShowingQR(null)}>
                     <div className="modal-content glass-panel" style={{ textAlign: 'center', padding: '3rem', maxWidth: '400px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
                         <h2 style={{ color: 'white', marginBottom: '1.5rem', fontWeight: 'bold' }}>Pase de Acceso Único</h2>
-                        
+
                         <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', display: 'inline-block', marginBottom: '1.5rem', border: '4px solid #3b82f6' }}>
-                            <QRCodeSVG 
-                                value={`${window.location.origin}/show/${showingQR.qr_code}`} 
+                            <QRCodeSVG
+                                value={`${window.location.origin}/show/${showingQR.qr_code}`}
                                 size={200}
                                 level={"Q"}
                             />
                         </div>
-                        
+
                         <h3 style={{ color: '#cbd5e1', fontSize: '1.2rem', marginBottom: '0.5rem' }}>{showingQR.first_name} {showingQR.last_name}</h3>
                         <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem' }}>Salón: {roomInfo?.name}</p>
 
-                        <button 
+                        <button
                             style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.8rem 2rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%' }}
                             onClick={() => setShowingQR(null)}
                         >
