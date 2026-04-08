@@ -17,7 +17,7 @@ const AttendeeList = () => {
     const [attendees, setAttendees] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
-    const [searchParams, setSearchParams] = useState('');
+    const [roomInfo, setRoomInfo] = useState(null);
     const [showingQR, setShowingQR] = useState(null);
 
     const hiddenFileInput = useRef(null);
