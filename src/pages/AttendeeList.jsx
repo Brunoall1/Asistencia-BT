@@ -208,6 +208,9 @@ const AttendeeList = () => {
         }
     };
 
+    const safeArrivedCount = attendees.filter(a => String(a.has_arrived) === "1" || a.has_arrived === true || String(a.has_arrived) === "true").length;
+    const safeCapacity = roomInfo?.expected_capacity || 0;
+
     return (
         <div className="attendee-container">
             <div className="background-mesh-attendee"></div>
@@ -256,7 +259,7 @@ const AttendeeList = () => {
                     />
                 </div>
                 <div className="stats">
-                    <span>Llegadas: <strong style={{ color: '#10b981' }}>{attendees.filter(a => !!a.has_arrived).length} / {roomInfo ? roomInfo.expected_capacity : 0}</strong> aforo esperado</span>
+                    <span>Llegadas: <strong style={{ color: '#10b981' }}>{safeArrivedCount} / {safeCapacity}</strong> aforo esperado</span>
                     <span>Total Registrados: <strong>{attendees.length}</strong></span>
                 </div>
             </div>
