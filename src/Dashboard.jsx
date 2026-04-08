@@ -128,7 +128,26 @@ const Dashboard = () => {
         
         let textToParse = decodedText;
         
-        // Check if QR is a URL
+        // Fast-path for internal platform generated QR codes
+        if (decodedText.includes('/show/')) {
+            try {
+                const hashMatch = decodedText.match(/\/show\/([a-zA-Z0-9]+)/);
+                if (hashMatch && hashMatch[1]) {
+                    const qrHash = hashMatch[1];
+                    const checkRes = await axios.put(`${API_URL}/public/attendee/${qrHash}/arrival`);
+                    if (checkRes.data.success) {
+                        alert(`🎟️ ¡Asistencia Marcada Exitosamente para ${checkRes.data.attendee.first_name} ${checkRes.data.attendee.last_name}!`);
+                        fetchData();
+                        return; // Stop the flow here, check-in done seamlessly
+                    }
+                }
+            } catch (err) {
+                alert('Hubo un error verificando el código interno. Podría ser un invitado no registrado.');
+                return;
+            }
+        }
+
+        // Check if QR is an external ticket URL needing Web Scraping
         if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
             setIsFetchingUrl(true);
             try {
