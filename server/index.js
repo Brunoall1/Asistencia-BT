@@ -208,6 +208,35 @@ app.put('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
     }
 });
 
+// Bulk Create Attendees
+app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) => {
+    const { attendees } = req.body;
+    const { eventId, roomId } = req.params;
+
+    if (!Array.isArray(attendees)) {
+        return res.status(400).json({ error: 'Attendees must be an array' });
+    }
+
+    try {
+        const addedAttendees = [];
+        for (const att of attendees) {
+            const id = uuidv4();
+            const qr_code = crypto.createHash('md5').update(id + eventId + Date.now().toString()).digest('hex');
+            
+            await db.run(
+                `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, payment_method, qr_code) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, eventId, roomId, att.first_name || '', att.last_name || '', att.email || '', att.payment_method || 'Efectivo', qr_code]
+            );
+            addedAttendees.push({ id, event_id: eventId, room_id: roomId, ...att, qr_code });
+        }
+
+        res.json({ success: true, attendees: addedAttendees });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Mark attendee as arrived / QR scan
 app.put('/api/events/:eventId/attendees/scan', async (req, res) => {
     const { qr_code } = req.body;

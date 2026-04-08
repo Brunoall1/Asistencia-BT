@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, UserPlus, Pencil, Trash2, Search, Mail, Clock, CreditCard, QrCode } from 'lucide-react';
+import { ArrowLeft, UserPlus, Pencil, Trash2, Search, Mail, Clock, CreditCard, QrCode, FileSpreadsheet, Download, Upload } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import * as XLSX from 'xlsx';
 import './AttendeeList.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -16,8 +17,10 @@ const AttendeeList = () => {
     const [attendees, setAttendees] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
-    const [roomInfo, setRoomInfo] = useState(null);
+    const [searchParams, setSearchParams] = useState('');
     const [showingQR, setShowingQR] = useState(null);
+
+    const hiddenFileInput = useRef(null);
 
     // Modal / Form state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -57,6 +60,81 @@ const AttendeeList = () => {
             fetchAttendees();
         }
     }, [eventId, roomId]);
+
+    useEffect(() => {
+        const filtered = attendees.filter(att =>
+            att.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            att.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (att.email && att.email.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+        setFilteredAttendees(filtered);
+    }, [searchTerm, attendees]);
+
+    const handleExportExcel = () => {
+        const dataToExport = filteredAttendees.map(att => ({
+            'Nombre': att.first_name,
+            'Apellido': att.last_name,
+            'Correo': att.email || 'N/A',
+            'Método Pago': att.payment_method || 'Efectivo',
+            'Hora Llegada': att.has_arrived ? att.arrival_time : 'Aún no llega',
+            'URL Validar Asistencia (Seguridad)': `${window.location.origin}/show/${att.qr_code}`
+        }));
+        
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Asistentes");
+        XLSX.writeFile(wb, `Asistentes_Salon_${roomInfo?.name || roomId}.xlsx`);
+    };
+
+    const handleImportExcelClick = () => {
+        hiddenFileInput.current.click();
+    };
+
+    const handleFileChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setLoading(true);
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const bstr = evt.target.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws);
+
+                // Map Excel Columns -> Supported arrays for SQLite Bulk loop
+                const mappedAttendees = data.map(row => ({
+                    first_name: row['Nombre'] || row['Nombres'] || row['First Name'] || '',
+                    last_name: row['Apellido'] || row['Apellidos'] || row['Last Name'] || '',
+                    email: row['Correo'] || row['Email'] || '',
+                    payment_method: row['Pago'] || row['Método Pago'] || 'Efectivo'
+                })).filter(att => att.first_name || att.last_name);
+
+                if (mappedAttendees.length > 0) {
+                    const res = await axios.post(`${API_URL}/events/${eventId}/rooms/${roomId}/attendees/bulk`, {
+                        attendees: mappedAttendees
+                    });
+                    if (res.data.success) {
+                        alert(`🎟️ ¡Importación exitosa! Se procesaron ${mappedAttendees.length} nuevos asistentes al Salón.`);
+                        fetchAttendees();
+                    }
+                } else {
+                    alert('No se encontraron registros válidos o las columnas no coinciden con las directrices esperadas ("Nombre", "Apellido", "Correo", "Pago").');
+                }
+            } catch (err) {
+                console.error("Error importing excel:", err);
+                alert("Ocurrió un crítico error al procesar el archivo XLS/CSV binario.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        reader.readAsBinaryString(file);
+        
+        // Reset unmounted payload references so repeat uploads work flawlessly
+        e.target.value = null;
+    };
 
     const openModal = (attendee = null) => {
         if (attendee) {
@@ -148,10 +226,28 @@ const AttendeeList = () => {
                     <h1>Asistentes del Salón {roomInfo?.name ? `- ${roomInfo.name}` : ''}</h1>
                     <p className="course-badge">Salón ID: {roomId}</p>
                 </div>
-                <button className="primary-btn" onClick={() => openModal()}>
-                    <UserPlus size={18} />
-                    Nuevo Asistente
-                </button>
+                
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <input
+                        type="file"
+                        accept=".xlsx, .xls, .csv"
+                        ref={hiddenFileInput}
+                        style={{ display: 'none' }}
+                        onChange={handleFileChange}
+                    />
+                    <button className="primary-btn" onClick={handleImportExcelClick} style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }} title="Subir lista en Excel (.xlsx)">
+                        <Upload size={18} />
+                        Importar 
+                    </button>
+                    <button className="primary-btn" onClick={handleExportExcel} style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)' }} title="Descargar vista actual en Excel">
+                        <Download size={18} />
+                        Exportar
+                    </button>
+                    <button className="primary-btn" onClick={() => openModal()} style={{ background: '#3b82f6' }}>
+                        <UserPlus size={18} />
+                        Nuevo Asistente
+                    </button>
+                </div>
             </header>
 
             <div className="toolbar">
