@@ -164,7 +164,7 @@ const AttendeeList = () => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="stats" style={{ display: 'flex', gap: '2rem' }}>
+                <div className="stats">
                     <span>Llegadas: <strong style={{ color: '#10b981' }}>{attendees.filter(a => !!a.has_arrived).length} / {roomInfo ? roomInfo.expected_capacity : 0}</strong> aforo esperado</span>
                     <span>Total Registrados: <strong>{attendees.length}</strong></span>
                 </div>
