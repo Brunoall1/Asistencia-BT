@@ -261,7 +261,7 @@ app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) =
 app.get('/api/public/attendee/:qrCode', async (req, res) => {
     try {
         const attendee = await db.get(`
-            SELECT a.*, r.name as room_name, e.name as event_name 
+            SELECT a.*, r.name as room_name, e.name as event_name, e.access_code as event_access_code
             FROM attendees a
             JOIN rooms r ON a.room_id = r.id
             JOIN events e ON a.event_id = e.id

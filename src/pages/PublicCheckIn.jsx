@@ -12,6 +12,7 @@ const PublicCheckIn = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [marking, setMarking] = useState(false);
+    const [isUnlocked, setIsUnlocked] = useState(false);
 
     useEffect(() => {
         const fetchAttendee = async () => {
@@ -44,6 +45,16 @@ const PublicCheckIn = () => {
         }
     };
 
+    const handleUnlockPrompt = () => {
+        if (isUnlocked || attendee?.has_arrived) return;
+        const code = prompt('Para habilitar el registro de llegada manual, ingrese el código de acceso del evento:');
+        if (code === attendee.event_access_code) {
+            setIsUnlocked(true);
+        } else if (code !== null) {
+            alert('Código de acceso incorrecto. No autorizado.');
+        }
+    };
+
     if (loading) {
         return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0f172a' }}><div className="loader"></div></div>;
     }
@@ -68,7 +79,11 @@ const PublicCheckIn = () => {
             
             <div className="glass-panel" style={{ maxWidth: '500px', width: '100%', position: 'relative', zIndex: 1, padding: '2.5rem' }}>
                 <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', color: 'white', fontSize: '2rem', fontWeight: 'bold' }}>
+                    <div 
+                        onDoubleClick={handleUnlockPrompt}
+                        style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', color: 'white', fontSize: '2rem', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none' }}
+                        title="Doble clic para autorizar llegada"
+                    >
                         {attendee.first_name.charAt(0)}{attendee.last_name.charAt(0)}
                     </div>
                     <h1 style={{ color: 'white', fontSize: '2rem', marginBottom: '0.5rem', marginTop: '0' }}>{attendee.first_name} {attendee.last_name}</h1>
@@ -98,7 +113,7 @@ const PublicCheckIn = () => {
                         <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Asistencia Confirmada</h2>
                         <p style={{ color: '#a7f3d0' }}>Llegada registrada a las <strong>{attendee.arrival_time}</strong></p>
                     </div>
-                ) : (
+                ) : isUnlocked ? (
                     <button 
                         onClick={handleCheckIn}
                         disabled={marking}
@@ -123,6 +138,10 @@ const PublicCheckIn = () => {
                         {marking ? <div className="loader" style={{ width: '20px', height: '20px', borderWidth: '3px' }}></div> : <Clock size={20} />}
                         {marking ? 'Marcando...' : 'Marcar Llegada Manual'}
                     </button>
+                ) : (
+                    <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.9rem', fontStyle: 'italic', marginTop: '1rem', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
+                        <p>Doble-clic en la burbuja de iniciales para autenticar la llegada.</p>
+                    </div>
                 )}
             </div>
         </div>
