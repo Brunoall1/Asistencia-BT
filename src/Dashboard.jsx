@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Users, BookOpen, MapPin, Plus, X, ScanLine, ArrowLeft } from 'lucide-react';
+import { Users, BookOpen, MapPin, Plus, X, ScanLine, ArrowLeft, Link as LinkIcon, ListChecks } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import './Dashboard.css';
@@ -50,7 +50,9 @@ const Dashboard = () => {
 
             if (roomsRes.data.success) {
                 const fetchedRooms = roomsRes.data.rooms;
-                const allAttendees = attendeesRes.data.success ? attendeesRes.data.attendees : [];
+                const rawAttendees = attendeesRes.data.success ? attendeesRes.data.attendees : [];
+                // ONLY count accepted attendees for Dashboard charts and metrics
+                const allAttendees = rawAttendees.filter(a => a.status === 'accepted' || !a.status);
 
                 const formattedRooms = fetchedRooms.map(r => {
                     const roomAttendees = allAttendees.filter(a => a.room_id === r.id);
@@ -257,10 +259,31 @@ const Dashboard = () => {
                         <strong style={{ letterSpacing: '2px', color: 'white' }}>{showAccessCode ? eventData?.access_code : '••••••••'}</strong>
                     </div>
                 </div>
-                <div className="header-actions">
+                <div className="header-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', alignItems: 'center', marginTop: '15px' }}>
+                    <button
+                        className="glass-btn"
+                        style={{ padding: '0.6rem 1.2rem' }}
+                        onClick={() => {
+                            const registerUrl = `${window.location.origin}/register/${eventId}`;
+                            navigator.clipboard.writeText(registerUrl)
+                                .then(() => alert('¡Enlace de registro copiado al portapapeles!'))
+                                .catch(err => console.error('Error al copiar el enlace:', err));
+                        }}
+                    >
+                        <LinkIcon size={20} />
+                        Registro
+                    </button>
+                    <button
+                        className="glass-btn"
+                        style={{ padding: '0.6rem 1.2rem', borderColor: '#fbbf24', color: '#fbbf24' }}
+                        onClick={() => navigate(`/event/${eventId}/pending`)}
+                    >
+                        <ListChecks size={20} />
+                        Lista por Aceptar
+                    </button>
                     <button
                         className="add-room-btn glass-btn"
-                        style={{ padding: '0.6rem 1.2rem', margin: 10 }}
+                        style={{ padding: '0.6rem 1.2rem' }}
                         onClick={() => setShowAddModal(true)}
                     >
                         <Plus size={20} />
@@ -268,7 +291,7 @@ const Dashboard = () => {
                     </button>
                     <button
                         className="primary-btn"
-                        style={{ padding: '0.6rem 1.2rem', margin: 0 }}
+                        style={{ padding: '0.6rem 1.2rem' }}
                         onClick={() => setShowQRModal(true)}
                     >
                         <ScanLine size={20} />

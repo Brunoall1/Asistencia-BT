@@ -1,0 +1,136 @@
+/* PrintBadges.css */
+
+/* Hide the container entirely when NOT printing to avoid layout issues */
+.print-badges-wrapper:not(.is-printing) {
+    display: none;
+}
+
+.print-badges-wrapper.is-printing {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 99999;
+    background: white !important;
+    background: white; /* Important to override dark mode */
+    min-height: 100vh;
+}
+
+/* Page configurations */
+.carta-page {
+    width: 8.5in;
+    height: 11in;
+    margin: 0 auto;
+    background: white;
+    box-sizing: border-box;
+    padding: 0.5in; /* Margins for the printer, e.g., 0.5 inches all around */
+}
+
+/* The grid layout: 2 columns, 5 rows */
+.badges-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(5, 1fr);
+    width: 100%;
+    height: 100%;
+    gap: 0.25in; /* Space between stickers if any, adjust based on physical sheet */
+}
+
+/* Individual badge slot */
+.badge-slot {
+    border: 1px dashed #ccc; /* Visual aid before print, mostly for debug or guide */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 0.2in;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Remove border inside actual print to avoid ink waste if stickers are pre-cut */
+@media print {
+    body * {
+        visibility: hidden; /* Hide all app content */
+    }
+    .print-badges-wrapper, .print-badges-wrapper * {
+        visibility: visible;
+        color: black !important;
+        background: transparent !important;
+    }
+    .print-badges-wrapper {
+        position: absolute;
+        left: 0;
+        top: 0;
+        margin: 0;
+        padding: 0;
+    }
+    @page {
+        size: letter;
+        margin: 0; /* Remove default browser margins so our padding takes effect */
+    }
+    .carta-page {
+        margin: 0;
+    }
+    .badge-slot {
+        border: none;
+    }
+}
+
+.empty-slot {
+    width: 100%;
+    height: 100%;
+}
+
+.badge-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    gap: 10px;
+}
+
+.qr-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.qr-wrapper svg {
+    max-width: 1.5in;
+    max-height: 1.5in;
+}
+
+/* Container for text layout */
+.badge-text-container {
+    text-align: center;
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Auto sizing / truncating logic to keep on one line */
+.badge-name {
+    font-size: 14pt;
+    font-weight: bold;
+    font-family: sans-serif;
+    color: black !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.badge-room {
+    font-size: 11pt;
+    font-weight: normal;
+    font-family: sans-serif;
+    color: #444 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    margin-top: 5px;
+}

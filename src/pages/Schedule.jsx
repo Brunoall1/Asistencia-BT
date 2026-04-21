@@ -10,6 +10,7 @@ const Schedule = () => {
     const { eventId } = useParams();
     const [rooms, setRooms] = useState([]);
     const [sessions, setSessions] = useState([]);
+    const [eventInfo, setEventInfo] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,11 +25,15 @@ const Schedule = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [roomsRes, sessionsRes] = await Promise.all([
+            const [eventRes, roomsRes, sessionsRes] = await Promise.all([
+                axios.get(`${API_URL}/events/${eventId}`),
                 axios.get(`${API_URL}/events/${eventId}/rooms`),
                 axios.get(`${API_URL}/events/${eventId}/sessions`)
             ]);
 
+            if (eventRes.data.success) {
+                setEventInfo(eventRes.data.event);
+            }
             if (roomsRes.data.success) {
                 setRooms(roomsRes.data.rooms);
             }
@@ -90,17 +95,15 @@ const Schedule = () => {
         <div className="schedule-container">
             <div className="background-mesh-schedule"></div>
 
-            <header className="schedule-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <header className="schedule-header" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
                     <h1>
-                        <span className="gradient-text-alt">Cronograma de Eventos</span>
+                        <span className="gradient-text-alt">
+                            Cronograma del evento "{eventInfo?.name || '...'}"
+                        </span>
                     </h1>
-                    <p>Distribución de cursos, horarios y profesores asignados</p>
+                    <p>Distribución de cursos, horarios y profesores asignados a cada Sala:</p>
                 </div>
-                <button className="primary-btn" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} />
-                    Agregar Información
-                </button>
             </header>
 
             {loading ? (
@@ -113,7 +116,16 @@ const Schedule = () => {
                 <div className="schedule-grid">
                     {scheduleByRoom.map((roomSchedule, idx) => (
                         <div key={roomSchedule.id} className="room-schedule-card">
-                            <h2 className="room-title">{roomSchedule.name}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>
+                                <h2 className="room-title" style={{ margin: 0, paddingBottom: 0, borderBottom: 'none' }}>{roomSchedule.name}</h2>
+                                <button className="primary-btn" onClick={() => {
+                                    setFormData({ ...formData, room_id: roomSchedule.id });
+                                    setIsModalOpen(true);
+                                }} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', margin: 0 }}>
+                                    <Plus size={14} />
+                                    Agregar Información
+                                </button>
+                            </div>
                             <div className="courses-list">
                                 {roomSchedule.courses.length === 0 ? (
                                     <p style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem' }}>Aún no hay charlas para este salón.</p>

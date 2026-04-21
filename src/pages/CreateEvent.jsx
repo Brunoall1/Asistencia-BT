@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Shield, Key, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react';
 import './CreateEvent.css'; // Will create this
+import Flatpickr from 'react-flatpickr';
+import { Spanish } from 'flatpickr/dist/l10n/es.js';
+import 'flatpickr/dist/themes/dark.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -16,7 +19,10 @@ const CreateEvent = () => {
     const [eventData, setEventData] = useState({
         name: '',
         expected_forum: '',
-        rooms_count: ''
+        rooms_count: '',
+        dates: '',
+        logo: '',
+        custom_message: ''
     });
 
     const [createdEvent, setCreatedEvent] = useState(null);
@@ -34,6 +40,19 @@ const CreateEvent = () => {
             setAuthError('Clave incorrecta. Intentalo de nuevo.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setEventData({ ...eventData, logo: reader.result });
+            };
+            reader.readAsDataURL(file);
+        } else {
+            setEventData({ ...eventData, logo: '' });
         }
     };
 
@@ -129,6 +148,49 @@ const CreateEvent = () => {
                                         required
                                     />
                                 </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '1rem' }}>
+                                <label>Día / Días del Evento</label>
+                                <Flatpickr
+                                    options={{
+                                        mode: "range",
+                                        locale: Spanish,
+                                        dateFormat: "d/m/Y",
+                                        showMonths: 2
+                                    }}
+                                    value={eventData.dates}
+                                    onChange={(selectedDates, dateStr) => {
+                                        setEventData({ ...eventData, dates: dateStr });
+                                    }}
+                                    placeholder="Selecciona 1 día o un rango de días..."
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', outline: 'none' }}
+                                    required
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '1rem' }}>
+                                <label>Logo del Evento (Opcional)</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileChange}
+                                    style={{ padding: '0.6rem', border: '1px dashed rgba(255,255,255,0.3)', background: 'rgba(0,0,0,0.2)' }}
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '1rem' }}>
+                                <label>Mensaje Personalizado (Opcional)</label>
+                                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 0.5rem 0' }}>
+                                    Usa <strong>{'{nombre}'}</strong>, <strong>{'{sala}'}</strong> o <strong>{'{qr}'}</strong> para que el asistente reciba el mensaje adaptado a él.
+                                </p>
+                                <textarea
+                                    placeholder="Ej. ¡Hola {nombre}! Recuerda presentar este código {qr} en la puerta de {sala}."
+                                    rows="3"
+                                    value={eventData.custom_message}
+                                    onChange={(e) => setEventData({ ...eventData, custom_message: e.target.value })}
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', resize: 'vertical' }}
+                                />
                             </div>
 
                             <button type="submit" className="primary-btn full-width mt-4" disabled={isLoading}>

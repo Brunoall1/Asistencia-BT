@@ -1,0 +1,238 @@
+.pending-list-container {
+    padding: 2rem;
+    min-height: 100vh;
+    color: white;
+    font-family: 'Inter', system-ui, sans-serif;
+    position: relative;
+    z-index: 1;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+    position: relative;
+    z-index: 10;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #e2e8f0; /* Brighter color */
+    text-decoration: none;
+    font-weight: 600; /* Bolder */
+    transition: color 0.3s ease, text-shadow 0.3s ease;
+    margin-bottom: 1rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8); /* Added shadow for contrast */
+}
+
+.back-link:hover {
+    color: #ffffff;
+    text-shadow: 0 2px 8px rgba(0,0,0,1);
+}
+
+.header-title h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 800;
+    color: #ffffff;
+    text-shadow: 0 4px 6px rgba(0,0,0,0.5); /* Better contrast */
+}
+
+.header-title p {
+    color: #cbd5e1; /* Brighter gray */
+    font-size: 1.1rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 1rem;
+    border: 1px dashed rgba(148, 163, 184, 0.4);
+    text-align: center;
+}
+
+.empty-icon {
+    color: #475569;
+    margin-bottom: 1.5rem;
+}
+
+.empty-state h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: #e2e8f0;
+}
+
+.empty-state p {
+    color: #94a3b8;
+}
+
+.bulk-actions-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(30, 41, 59, 0.7);
+    padding: 1rem 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.selection-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-weight: 500;
+    color: #cbd5e1;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: transform 0.2s;
+}
+
+.icon-btn:hover {
+    transform: scale(1.1);
+}
+
+.bulk-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.bulk-reject-btn, .bulk-accept-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: filter 0.3s ease, transform 0.2s ease;
+}
+
+.bulk-reject-btn {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.bulk-accept-btn {
+    background: #10b981;
+    color: white;
+}
+
+.bulk-reject-btn:hover:not(:disabled), .bulk-accept-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+    transform: translateY(-2px);
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.pending-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.pending-card:hover {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: rgba(255,255,255,0.1);
+}
+
+.pending-card.selected {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.card-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-details {
+    flex: 1;
+}
+
+.card-details h4 {
+    font-size: 1.1rem;
+    margin: 0 0 0.25rem 0;
+    color: #f8fafc;
+}
+
+.card-meta {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    gap: 0.25rem;
+}
+
+.card-meta strong {
+    color: #cbd5e1;
+}
+
+.card-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.action-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    color: white;
+    transition: all 0.3s ease;
+}
+
+.action-btn.accept {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.action-btn.accept:hover:not(:disabled) {
+    background: #10b981;
+    color: white;
+}
+
+.action-btn.reject {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.action-btn.reject:hover:not(:disabled) {
+    background: #ef4444;
+    color: white;
+}
+
+.action-btn:disabled, .bulk-reject-btn:disabled, .bulk-accept-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}

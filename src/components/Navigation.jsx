@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useParams, useLocation } from 'react-router-dom';
-import { Menu, X, Home, Calendar, ArrowLeft } from 'lucide-react';
+import { Menu, X, Home, Calendar, ArrowLeft, ListChecks, Image, MessageSquare } from 'lucide-react';
 import './Navigation.css';
 
 const Navigation = () => {
@@ -60,6 +60,36 @@ const Navigation = () => {
                         >
                             <Calendar size={20} />
                             <span>Cronograma</span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink
+                            to={`/event/${eventId}/pending`}
+                            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                            onClick={closeMenu}
+                        >
+                            <ListChecks size={20} />
+                            <span>Aprobaciones</span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink
+                            to={`/event/${eventId}/logo`}
+                            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                            onClick={closeMenu}
+                        >
+                            <Image size={20} />
+                            <span>Logo del Evento</span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink
+                            to={`/event/${eventId}/message`}
+                            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                            onClick={closeMenu}
+                        >
+                            <MessageSquare size={20} />
+                            <span>Msj. Personalizado</span>
                         </NavLink>
                     </li>
                     <li style={{ marginTop: 'auto' }}>

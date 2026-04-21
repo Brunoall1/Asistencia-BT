@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, UserPlus, Pencil, Trash2, Search, Mail, Clock, CreditCard, QrCode, FileSpreadsheet, Download, Upload } from 'lucide-react';
+import { ArrowLeft, UserPlus, Pencil, Trash2, Search, Mail, Clock, CreditCard, QrCode, FileSpreadsheet, Download, Upload, MessageCircle, Send, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import * as XLSX from 'xlsx';
+import PrintBadges from '../components/PrintBadges';
 import './AttendeeList.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -19,7 +20,12 @@ const AttendeeList = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [roomInfo, setRoomInfo] = useState(null);
+    const [eventInfo, setEventInfo] = useState(null);
     const [showingQR, setShowingQR] = useState(null);
+    const [selectedPrintAttendees, setSelectedPrintAttendees] = useState([]);
+    const [isPrinting, setIsPrinting] = useState(false);
+    const [showSlotModal, setShowSlotModal] = useState(false);
+    const [printStartingSlot, setPrintStartingSlot] = useState(0);
 
     const hiddenFileInput = useRef(null);
 
@@ -30,9 +36,14 @@ const AttendeeList = () => {
         first_name: '',
         last_name: '',
         email: '',
+        phone: '',
+        company: 'No Aplica',
         payment_method: 'Efectivo',
         room_id: roomId || ''
     });
+    
+    const [sendingEmailId, setSendingEmailId] = useState(null);
+    const [companies, setCompanies] = useState([]);
 
     const fetchAttendees = async () => {
         setLoading(true);
@@ -48,6 +59,20 @@ const AttendeeList = () => {
             if (roomsRes.data.success) {
                 const currentRoom = roomsRes.data.rooms.find(r => String(r.id) === String(roomId));
                 setRoomInfo(currentRoom);
+            }
+
+            const eventRes = await axios.get(`${API_URL}/events/${eventId}`);
+            if (eventRes.data.success) {
+                setEventInfo(eventRes.data.event);
+            }
+
+            try {
+                const compRes = await axios.get(`${API_URL}/events/${eventId}/companies`);
+                if (compRes.data && compRes.data.success) {
+                    setCompanies(compRes.data.companies);
+                }
+            } catch (e) {
+                console.error('Error fetching companies:', e);
             }
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -76,6 +101,8 @@ const AttendeeList = () => {
             'Nombre': att.first_name,
             'Apellido': att.last_name,
             'Correo': att.email || 'N/A',
+            'WhatsApp': att.phone || 'N/A',
+            'Empresa': att.company || 'No Aplica',
             'Método Pago': att.payment_method || 'Efectivo',
             'Hora Llegada': att.has_arrived ? att.arrival_time : 'Aún no llega',
             'URL Validar Asistencia (Seguridad)': `${window.location.origin}/show/${att.qr_code}`
@@ -110,6 +137,8 @@ const AttendeeList = () => {
                     first_name: row['Nombre'] || row['Nombres'] || row['First Name'] || '',
                     last_name: row['Apellido'] || row['Apellidos'] || row['Last Name'] || '',
                     email: row['Correo'] || row['Email'] || '',
+                    phone: row['Teléfono'] || row['WhatsApp'] || row['Telefono'] || row['Phone'] || '',
+                    company: row['Empresa'] || row['Compañia'] || row['Company'] || 'No Aplica',
                     payment_method: row['Pago'] || row['Método Pago'] || 'Efectivo'
                 })).filter(att => att.first_name || att.last_name);
 
@@ -148,6 +177,8 @@ const AttendeeList = () => {
                 first_name: '',
                 last_name: '',
                 email: '',
+                phone: '',
+                company: 'No Aplica',
                 payment_method: 'Efectivo',
                 room_id: roomId
             });
@@ -208,6 +239,73 @@ const AttendeeList = () => {
         }
     };
 
+    const handleSendWA = (att) => {
+        if(!att.phone) {
+            alert('Este asistente no tiene un número registrado.');
+            return;
+        }
+        const cleanPhone = att.phone.replace(/\\D/g, '');
+        const eventName = roomInfo?.conference_name || 'nuestro evento';
+        const roomName = roomInfo?.name || 'nuestra sala';
+        const qrUrl = `${window.location.origin}/show/${att.qr_code}`;
+        const qrImageUrl = `${window.location.origin}/api/public/qr/${att.qr_code}.png`;
+
+        let message = '';
+        if (eventInfo?.custom_message) {
+            let userMsg = eventInfo.custom_message
+                .replace(/{nombre}/g, `${att.first_name} ${att.last_name}`)
+                .replace(/{sala}/g, roomName)
+                .replace(/{qr}/g, qrUrl)
+                .replace(/\\n/g, '%0A');
+
+            message = `${userMsg} %0A%0AImagen de tu QR: ${qrImageUrl}`;
+        } else {
+            message = `Hola ${att.first_name} ${att.last_name}, te comparto tu qr de acceso al evento "${eventName}" que fuiste registrado en la sala "${roomName}". %0A%0ATu pase web: ${qrUrl} %0A%0AImagen de tu QR (Clic para abrir o descargar directo): ${qrImageUrl}`;
+        }
+        
+        window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+    };
+
+    const toggleSelection = (att) => {
+        if (selectedPrintAttendees.find(a => a.id === att.id)) {
+            setSelectedPrintAttendees(selectedPrintAttendees.filter(a => a.id !== att.id));
+        } else {
+            if (selectedPrintAttendees.length >= 10) {
+                alert('Puedes imprimir un máximo de 10 etiquetas a la vez por hoja.');
+                return;
+            }
+            setSelectedPrintAttendees([...selectedPrintAttendees, att]);
+        }
+    };
+
+    const handlePrintClick = () => {
+        if (selectedPrintAttendees.length === 1) {
+            setShowSlotModal(true);
+        } else if (selectedPrintAttendees.length > 1) {
+            setPrintStartingSlot(0);
+            setIsPrinting(true);
+        }
+    };
+
+    const handleSendEmail = async (att) => {
+        if(!att.email) {
+            alert('Este asistente no tiene correo electrónico registrado.');
+            return;
+        }
+        setSendingEmailId(att.id);
+        try {
+            const res = await axios.post(`${API_URL}/events/${eventId}/attendees/${att.id}/send-email`);
+            if(res.data.success) {
+                alert('Correo enviado exitosamente.');
+            }
+        } catch (err) {
+            console.error('Error enviando correo:', err);
+            alert('Hubo un error enviando el correo. Verifica SMTP o reintenta.');
+        } finally {
+            setSendingEmailId(null);
+        }
+    };
+
     const safeArrivedCount = attendees.filter(a => String(a.has_arrived) === "1" || a.has_arrived === true || String(a.has_arrived) === "true").length;
     const safeCapacity = roomInfo?.expected_capacity || 0;
 
@@ -245,6 +343,12 @@ const AttendeeList = () => {
                         <UserPlus size={18} />
                         Nuevo Asistente
                     </button>
+                    {selectedPrintAttendees.length > 0 && (
+                        <button className="primary-btn" onClick={handlePrintClick} style={{ background: '#8b5cf6' }}>
+                            <Printer size={18} />
+                            Imprimir Seleccionados ({selectedPrintAttendees.length})
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -271,6 +375,7 @@ const AttendeeList = () => {
                     <table className="attendee-table">
                         <thead>
                             <tr>
+                                <th style={{width: '30px', textAlign: 'center'}}>Sel.</th>
                                 <th>Nombre Completo</th>
                                 <th>Contacto</th>
                                 <th>Llegada</th>
@@ -281,24 +386,36 @@ const AttendeeList = () => {
                         <tbody>
                             {filteredAttendees.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="empty-state">No se encontraron asistentes para este salón.</td>
+                                    <td colSpan="6" className="empty-state">No se encontraron asistentes para este salón.</td>
                                 </tr>
                             ) : (
                                 filteredAttendees.map(att => (
-                                    <tr key={att.id}>
+                                    <tr key={att.id} style={{ background: selectedPrintAttendees.find(a => a.id === att.id) ? 'rgba(139, 92, 246, 0.1)' : '' }}>
+                                        <td style={{textAlign: 'center'}}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={!!selectedPrintAttendees.find(a => a.id === att.id)}
+                                                onChange={() => toggleSelection(att)}
+                                                style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
+                                            />
+                                        </td>
                                         <td>
                                             <div className="user-cell">
                                                 <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
                                                 <div className="user-name">
-                                                    <span className="first-name">{att.first_name}</span>
-                                                    <span className="last-name">{att.last_name}</span>
+                                                    <span className="first-name">{att.first_name} {att.last_name}</span>
+                                                    {(att.company && att.company !== 'No Aplica') ? (
+                                                        <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{att.company}</span>
+                                                    ) : (
+                                                        <span className="last-name"></span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             <div className="contact-cell">
-                                                <Mail size={14} className="cell-icon" />
-                                                {att.email || 'N/A'}
+                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.2rem'}}><Mail size={14} className="cell-icon" /> {att.email || 'N/A'}</div>
+                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#94a3b8'}}><MessageCircle size={14} className="cell-icon" /> {att.phone || 'N/A'}</div>
                                             </div>
                                         </td>
                                         <td>
@@ -326,6 +443,12 @@ const AttendeeList = () => {
                                                         <Clock size={16} />
                                                     </button>
                                                 )}
+                                                <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)} title="Enviar por WhatsApp">
+                                                    <MessageCircle size={16} />
+                                                </button>
+                                                <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
+                                                    <Send size={16} />
+                                                </button>
                                                 <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
                                                     <QrCode size={16} />
                                                 </button>
@@ -363,6 +486,29 @@ const AttendeeList = () => {
                             <div className="form-group">
                                 <label>Correo Electrónico</label>
                                 <input type="email" name="email" value={formData.email} onChange={handleInputChange} required />
+                            </div>
+                            <div className="form-group">
+                                <label>Teléfono / WhatsApp</label>
+                                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="Ej. +584141234567" />
+                            </div>
+                            <div className="form-group">
+                                <label>Empresa (Opcional)</label>
+                                <input 
+                                    list="companyListAdmin"
+                                    name="company" 
+                                    value={formData.company} 
+                                    onChange={handleInputChange} 
+                                    placeholder="Ej. Mi Empresa C.A." 
+                                    onFocus={(e) => {
+                                        if (e.target.value === 'No Aplica') setFormData({...formData, company: ''});
+                                    }}
+                                />
+                                <datalist id="companyListAdmin">
+                                    <option value="No Aplica" />
+                                    {companies.map((comp, idx) => (
+                                        <option key={idx} value={comp} />
+                                    ))}
+                                </datalist>
                             </div>
                             <div className="form-group">
                                 <label>Método de Pago</label>
@@ -408,6 +554,64 @@ const AttendeeList = () => {
                             Cerrar
                         </button>
                     </div>
+                </div>
+            )}
+            {showSlotModal && (
+                <div className="modal-overlay" onClick={() => setShowSlotModal(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', background: '#1e293b', borderRadius: '16px', padding: '2rem' }}>
+                        <h2 className="gradient-text" style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Seleccionar Posición</h2>
+                        <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                            Como elegiste solo un asistente, indica en cuál de los 10 espacios de la hoja adhesiva quieres imprimir su gafete. Esto te permite ahorrar hojas que ya están parcialmente usadas.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            {Array(10).fill(null).map((_, idx) => (
+                                <div 
+                                    key={idx}
+                                    onClick={() => {
+                                        setPrintStartingSlot(idx);
+                                        setShowSlotModal(false);
+                                        setIsPrinting(true);
+                                    }}
+                                    style={{ 
+                                        border: '1px dashed rgba(255,255,255,0.2)', 
+                                        padding: '1.5rem', 
+                                        textAlign: 'center', 
+                                        cursor: 'pointer',
+                                        borderRadius: '8px',
+                                        background: 'rgba(0,0,0,0.2)',
+                                        color: '#cbd5e1',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)'; e.currentTarget.style.borderColor = '#8b5cf6'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+                                >
+                                    Espacio {idx + 1}
+                                </div>
+                            ))}
+                        </div>
+                        <button 
+                            className="btn-cancel" 
+                            style={{ width: '100%', marginTop: '1.5rem' }} 
+                            onClick={() => setShowSlotModal(false)}
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {isPrinting && (
+                <div className="print-badges-wrapper is-printing">
+                    <PrintBadges 
+                        attendees={selectedPrintAttendees}
+                        roomName={roomInfo?.name || 'General'}
+                        startingSlot={printStartingSlot}
+                        onFinish={() => {
+                            setIsPrinting(false);
+                            // Opcionalmente mantener la selección, pero la limpiaremos para conveniencia:
+                            setSelectedPrintAttendees([]);
+                        }}
+                    />
                 </div>
             )}
         </div>

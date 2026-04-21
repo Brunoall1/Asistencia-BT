@@ -10,6 +10,10 @@ import AdminEventsList from './pages/AdminEventsList';
 import AdminEventDetails from './pages/AdminEventDetails';
 import AdminHome from './pages/AdminHome';
 import PublicCheckIn from './pages/PublicCheckIn';
+import PublicRegistration from './pages/PublicRegistration';
+import PendingList from './pages/PendingList';
+import EventLogoSettings from './pages/EventLogoSettings';
+import EventMessageSettings from './pages/EventMessageSettings';
 
 function App() {
   return (
@@ -25,11 +29,15 @@ function App() {
           <Route path="/admin/events/:eventId" element={<AdminEventDetails />} />
           
           <Route path="/show/:qrCode" element={<PublicCheckIn />} />
+          <Route path="/register/:eventId" element={<PublicRegistration />} />
 
           <Route path="/event/:eventId" element={<Outlet />}>
             <Route index element={<Dashboard />} />
             <Route path="schedule" element={<Schedule />} />
             <Route path="attendees/:courseId" element={<AttendeeList />} />
+            <Route path="pending" element={<PendingList />} />
+            <Route path="logo" element={<EventLogoSettings />} />
+            <Route path="message" element={<EventMessageSettings />} />
           </Route>
         </Routes>
       </Layout>

@@ -4,10 +4,13 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('./database');
 const path = require('path');
+const nodemailer = require('nodemailer');
+const QRCode = require('qrcode');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const PORT = process.env.PORT || 3001;
 
@@ -98,15 +101,15 @@ const generateAccessCode = () => Math.random().toString(36).substring(2, 8).toUp
 
 // Create an event
 app.post('/api/events', async (req, res) => {
-    const { name, expected_forum, rooms_count } = req.body;
+    const { name, expected_forum, rooms_count, dates, logo, custom_message } = req.body;
     const id = uuidv4();
     const accessCode = generateAccessCode();
 
     try {
-        await db.run(`INSERT INTO events (id, name, expected_forum, rooms_count, access_code) VALUES (?, ?, ?, ?, ?)`,
-            [id, name, expected_forum, rooms_count, accessCode]
+        await db.run(`INSERT INTO events (id, name, expected_forum, rooms_count, access_code, dates, logo, custom_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, name, expected_forum, rooms_count, accessCode, dates || null, logo || null, custom_message || null]
         );
-        res.json({ success: true, event: { id, name, expected_forum, rooms_count, access_code: accessCode } });
+        res.json({ success: true, event: { id, name, expected_forum, rooms_count, access_code: accessCode, dates, logo, custom_message } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -121,6 +124,28 @@ app.get('/api/events/:eventId', async (req, res) => {
         } else {
             res.status(404).json({ success: false, message: 'Event not found' });
         }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update event logo
+app.put('/api/events/:eventId/logo', async (req, res) => {
+    const { logo } = req.body;
+    try {
+        await db.run(`UPDATE events SET logo = ? WHERE id = ?`, [logo || null, req.params.eventId]);
+        res.json({ success: true, message: 'Logo actualizado' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update event custom message
+app.put('/api/events/:eventId/message', async (req, res) => {
+    const { custom_message } = req.body;
+    try {
+        await db.run(`UPDATE events SET custom_message = ? WHERE id = ?`, [custom_message || null, req.params.eventId]);
+        res.json({ success: true, message: 'Mensaje actualizado' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -172,20 +197,35 @@ app.get('/api/events/:eventId/attendees', async (req, res) => {
     }
 });
 
+// Get unique companies
+app.get('/api/events/:eventId/companies', async (req, res) => {
+    try {
+        const result = await db.all(
+            `SELECT DISTINCT company FROM attendees WHERE event_id = ? AND company IS NOT NULL AND company != '' AND company != 'No Aplica' ORDER BY company ASC`, 
+            [req.params.eventId]
+        );
+        const companies = result.map(r => r.company);
+        res.json({ success: true, companies });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 // Create an attendee
 app.post('/api/events/:eventId/attendees', async (req, res) => {
-    const { room_id, first_name, last_name, email, payment_method } = req.body;
+    const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
     const event_id = req.params.eventId;
     const id = uuidv4();
     const qr_code = crypto.createHash('md5').update(id + event_id + Date.now().toString()).digest('hex');
 
     try {
         await db.run(
-            `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, payment_method, qr_code) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, event_id, room_id, first_name, last_name, email, payment_method, qr_code]
+            `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
+            [id, event_id, room_id, first_name, last_name, email, phone || '', company || 'No Aplica', payment_method, qr_code]
         );
-        res.json({ success: true, attendee: { id, event_id, room_id, first_name, last_name, email, payment_method, qr_code } });
+        res.json({ success: true, attendee: { id, event_id, room_id, first_name, last_name, email, phone, payment_method, qr_code, status: 'accepted' } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -193,14 +233,14 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
 
 // Update an attendee (Edit info)
 app.put('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
-    const { room_id, first_name, last_name, email, payment_method } = req.body;
+    const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
     const { eventId, attendeeId } = req.params;
 
     try {
         await db.run(
-            `UPDATE attendees SET room_id = ?, first_name = ?, last_name = ?, email = ?, payment_method = ? 
+            `UPDATE attendees SET room_id = ?, first_name = ?, last_name = ?, email = ?, phone = ?, company = ?, payment_method = ? 
              WHERE id = ? AND event_id = ?`,
-            [room_id, first_name, last_name, email, payment_method, attendeeId, eventId]
+            [room_id, first_name, last_name, email, phone || '', company || 'No Aplica', payment_method, attendeeId, eventId]
         );
         res.json({ success: true, message: 'Attendee updated successfully' });
     } catch (err) {
@@ -224,14 +264,89 @@ app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) =
             const qr_code = crypto.createHash('md5').update(id + eventId + Date.now().toString()).digest('hex');
             
             await db.run(
-                `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, payment_method, qr_code) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, eventId, roomId, att.first_name || '', att.last_name || '', att.email || '', att.payment_method || 'Efectivo', qr_code]
+                `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
+                [id, eventId, roomId, att.first_name || '', att.last_name || '', att.email || '', att.phone || '', att.company || 'No Aplica', att.payment_method || 'Efectivo', qr_code]
             );
-            addedAttendees.push({ id, event_id: eventId, room_id: roomId, ...att, qr_code });
+            addedAttendees.push({ id, event_id: eventId, room_id: roomId, ...att, qr_code, status: 'accepted' });
         }
 
         res.json({ success: true, attendees: addedAttendees });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// PUBLIC REGISTRATION & PENDING APPROVAL ROUTE
+// ==========================================
+
+// Public self-registration
+app.post('/api/public/events/:eventId/register', async (req, res) => {
+    const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
+    const event_id = req.params.eventId;
+    
+    if (!room_id || !first_name || !last_name) {
+        return res.status(400).json({ success: false, message: 'Faltan campos requeridos.' });
+    }
+
+    const id = uuidv4();
+    const qr_code = crypto.createHash('md5').update(id + event_id + Date.now().toString()).digest('hex');
+
+    try {
+        await db.run(
+            `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            [id, event_id, room_id, first_name, last_name, email, phone || '', company || 'No Aplica', payment_method || 'Tarjeta', qr_code]
+        );
+        res.json({ success: true, message: 'Registro exitoso, en espera de aprobación.', attendeeId: id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update an attendee status (accept / reject)
+app.put('/api/events/:eventId/attendees/:attendeeId/status', async (req, res) => {
+    const { status } = req.body; // 'accepted' or 'rejected'
+    const attendeeId = req.params.attendeeId;
+    const event_id = req.params.eventId;
+
+    if (!['accepted', 'rejected'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    try {
+        await db.run(
+            `UPDATE attendees SET status = ? WHERE id = ? AND event_id = ?`,
+            [status, attendeeId, event_id]
+        );
+        res.json({ success: true, message: `Status updated to ${status}` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Bulk update attendees status
+app.put('/api/events/:eventId/attendees/bulk-status', async (req, res) => {
+    const { status, attendeeIds } = req.body;
+    const event_id = req.params.eventId;
+
+    if (!['accepted', 'rejected'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    if (!Array.isArray(attendeeIds) || attendeeIds.length === 0) {
+        return res.status(400).json({ success: false, message: 'Must provide an array of attendee IDs' });
+    }
+
+    try {
+        // Build query string for IN clause. E.g., (?, ?, ?)
+        const placeholders = attendeeIds.map(() => '?').join(',');
+        await db.run(
+            `UPDATE attendees SET status = ? WHERE event_id = ? AND id IN (${placeholders})`,
+            [status, event_id, ...attendeeIds]
+        );
+        res.json({ success: true, message: `Bulk status updated to ${status}` });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -282,9 +397,115 @@ app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) =
     }
 });
 
+// Send Email Endpoint
+app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, res) => {
+    const { eventId, attendeeId } = req.params;
+    try {
+        const attendee = await db.get(`SELECT * FROM attendees WHERE id = ? AND event_id = ?`, [attendeeId, eventId]);
+        const event = await db.get(`SELECT * FROM events WHERE id = ?`, [eventId]);
+        const room = await db.get(`SELECT * FROM rooms WHERE id = ?`, [attendee?.room_id]);
+
+        if (!attendee || !attendee.email) {
+            return res.status(400).json({ success: false, message: 'El asistente no tiene un correo válido registrado.' });
+        }
+
+        // Generate QR code base64 image
+        const qrUrl = req.headers.origin + '/show/' + attendee.qr_code;
+        const qrImageBase64 = await QRCode.toDataURL(qrUrl);
+
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: process.env.SMTP_PORT,
+            secure: process.env.SMTP_PORT === '465',
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS
+            }
+        });
+
+        let htmlBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+                <h2>¡Hola ${attendee.first_name} ${attendee.last_name}!</h2>
+                <p>Te compartimos tu código QR de acceso al evento <strong>"${event?.name}"</strong>.</p>
+                <p>Estás registrado para asistir a la sala: <strong>"${room?.name}"</strong>.</p>
+                <p>Puedes presentar el código QR adjunto en la puerta el día del evento, o acceder al siguiente enlace:</p>
+                <p><a href="${qrUrl}">${qrUrl}</a></p>
+                <br/>
+                <p>¡Te esperamos!</p>
+            </div>
+        `;
+
+        // Si se colocó un mensaje personalizado, se reemplaza el contenido por defecto
+        if (event?.custom_message) {
+            let parsedMessage = event.custom_message
+                .replace(/{nombre}/g, `${attendee.first_name} ${attendee.last_name}`)
+                .replace(/{sala}/g, room?.name || '')
+                .replace(/{qr}/g, `<a href="${qrUrl}">${qrUrl}</a>`)
+                .replace(/\\n/g, '<br/>'); // Preserve line breaks
+                
+            htmlBody = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+                    <p>${parsedMessage}</p>
+                </div>
+            `;
+        }
+
+        const mailAttachments = [
+            {
+                filename: 'Pase-Acceso-QR.png',
+                content: qrImageBase64.split('base64,')[1],
+                encoding: 'base64'
+            }
+        ];
+
+        // Anexar logo del evento si existe
+        if (event?.logo && event.logo.includes('base64,')) {
+            const extension = event.logo.substring(event.logo.indexOf('/') + 1, event.logo.indexOf(';base64'));
+            mailAttachments.push({
+                filename: `Logo-Evento.${extension}`,
+                content: event.logo.split('base64,')[1],
+                encoding: 'base64'
+            });
+        }
+
+        const mailOptions = {
+            from: process.env.SMTP_USER || 'admin@brandingticket.com',
+            to: attendee.email,
+            subject: `Tu QR de Acceso - Evento: ${event?.name || 'BrandingTicket'}`,
+            html: htmlBody,
+            attachments: mailAttachments
+        };
+
+        if(!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+           return res.status(500).json({ success: false, message: 'Servidor SMTP no configurado en el archivo .env' });
+        }
+
+        await transporter.sendMail(mailOptions);
+        res.json({ success: true, message: 'Correo enviado correctamente' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==========================================
 // PUBLIC QR CHECK-IN ROUTES
 // ==========================================
+
+// Get QR Code Image Directly (For WhatsApp preview)
+app.get('/api/public/qr/:qrCode.png', async (req, res) => {
+    try {
+        const qrUrl = req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1')
+            ? `http://${req.headers.host.replace('3001', '5173')}/show/${req.params.qrCode}`
+            : `https://${req.headers.host}/show/${req.params.qrCode}`;
+            
+        // Provide the generated PNG directly
+        const buffer = await QRCode.toBuffer(qrUrl, { type: 'png', width: 300 });
+        res.setHeader('Content-Type', 'image/png');
+        res.send(buffer);
+    } catch (err) {
+        res.status(500).send('Error generating QR image');
+    }
+});
 
 // Get attendee info via QR Code (MD5)
 app.get('/api/public/attendee/:qrCode', async (req, res) => {

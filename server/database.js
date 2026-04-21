@@ -56,6 +56,9 @@ if (isPostgres) {
                     expected_forum INTEGER,
                     rooms_count INTEGER,
                     access_code TEXT UNIQUE NOT NULL,
+                    dates TEXT,
+                    logo TEXT,
+                    custom_message TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
@@ -78,15 +81,47 @@ if (isPostgres) {
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     email TEXT,
+                    phone TEXT,
+                    company TEXT DEFAULT 'No Aplica',
                     payment_method TEXT,
                     has_arrived BOOLEAN DEFAULT FALSE,
                     arrival_time TEXT,
                     qr_code TEXT NOT NULL UNIQUE,
+                    status TEXT DEFAULT 'accepted',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
                     FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
                 )
             `);
+            // Try to add column to existing table in case it was already created before
+            try {
+                await pool.query(`ALTER TABLE attendees ADD COLUMN status TEXT DEFAULT 'accepted'`);
+                console.log('Added default status column to existing attendees table (PostgreSQL).');
+            } catch (err) {}
+            try {
+                await pool.query(`ALTER TABLE attendees ADD COLUMN phone TEXT`);
+            } catch (err) {}
+            try {
+                await pool.query(`ALTER TABLE attendees ADD COLUMN company TEXT DEFAULT 'No Aplica'`);
+            } catch (err) {}
+            try {
+                await pool.query(`ALTER TABLE events ADD COLUMN dates TEXT`);
+                await pool.query(`ALTER TABLE events ADD COLUMN logo TEXT`);
+                await pool.query(`ALTER TABLE events ADD COLUMN custom_message TEXT`);
+                console.log('Added dates, logo, custom_message to events table (PostgreSQL).');
+            } catch (err) {}
+            try {
+                await pool.query(`ALTER TABLE attendees ADD COLUMN phone TEXT`);
+                console.log('Added phone column to existing attendees table (PostgreSQL).');
+            } catch (err) {
+                // Ignore error if column already exists
+            }
+            try {
+                await pool.query(`ALTER TABLE attendees ADD COLUMN company TEXT DEFAULT 'No Aplica'`);
+                console.log('Added company column to existing attendees table (PostgreSQL).');
+            } catch (err) {
+                // Ignore error if column already exists
+            }
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
@@ -141,6 +176,9 @@ if (isPostgres) {
                     expected_forum INTEGER,
                     rooms_count INTEGER,
                     access_code TEXT UNIQUE NOT NULL,
+                    dates TEXT,
+                    logo TEXT,
+                    custom_message TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             `);
@@ -163,15 +201,32 @@ if (isPostgres) {
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     email TEXT,
+                    phone TEXT,
+                    company TEXT DEFAULT 'No Aplica',
                     payment_method TEXT,
                     has_arrived BOOLEAN DEFAULT 0,
                     arrival_time TEXT,
                     qr_code TEXT NOT NULL UNIQUE,
+                    status TEXT DEFAULT 'accepted',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
                     FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
                 )
             `);
+
+            // Try to add column to existing table in case it was already created before
+            db.run(`ALTER TABLE attendees ADD COLUMN status TEXT DEFAULT 'accepted'`, (err) => {
+                if (!err) console.log('Added default status column to existing attendees table (SQLite).');
+            });
+            db.run(`ALTER TABLE events ADD COLUMN dates TEXT`, () => {});
+            db.run(`ALTER TABLE events ADD COLUMN logo TEXT`, () => {});
+            db.run(`ALTER TABLE events ADD COLUMN custom_message TEXT`, () => {});
+            db.run(`ALTER TABLE attendees ADD COLUMN phone TEXT`, (err) => {
+                if (!err) console.log('Added phone column to existing attendees table (SQLite).');
+            });
+            db.run(`ALTER TABLE attendees ADD COLUMN company TEXT DEFAULT 'No Aplica'`, (err) => {
+                if (!err) console.log('Added company column to existing attendees table (SQLite).');
+            });
             db.run(`
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
