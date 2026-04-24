@@ -375,7 +375,7 @@ const AttendeeList = () => {
                     <table className="attendee-table">
                         <thead>
                             <tr>
-                                <th style={{ width: '30px', textAlign: 'center' }}>Sel.</th>
+                                {/*} <th style={{ width: '30px', textAlign: 'center' }}>Sel.</th> */}
                                 <th>Nombre Completo</th>
                                 <th>Contacto</th>
                                 <th>Llegada</th>
@@ -446,9 +446,9 @@ const AttendeeList = () => {
                                                 <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)} title="Enviar por WhatsApp">
                                                     <MessageCircle size={16} />
                                                 </button>
-                                                {/*} <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
+                                                <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
                                                     <Send size={16} />
-                                                </button>*/}
+                                                </button>
                                                 <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
                                                     <QrCode size={16} />
                                                 </button>
