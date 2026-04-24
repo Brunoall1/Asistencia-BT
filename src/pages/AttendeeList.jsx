@@ -41,7 +41,7 @@ const AttendeeList = () => {
         payment_method: 'Efectivo',
         room_id: roomId || ''
     });
-    
+
     const [sendingEmailId, setSendingEmailId] = useState(null);
     const [companies, setCompanies] = useState([]);
 
@@ -240,7 +240,7 @@ const AttendeeList = () => {
     };
 
     const handleSendWA = (att) => {
-        if(!att.phone) {
+        if (!att.phone) {
             alert('Este asistente no tiene un número registrado.');
             return;
         }
@@ -262,7 +262,7 @@ const AttendeeList = () => {
         } else {
             message = `Hola ${att.first_name} ${att.last_name}, te comparto tu qr de acceso al evento "${eventName}" que fuiste registrado en la sala "${roomName}". %0A%0ATu pase web: ${qrUrl} %0A%0AImagen de tu QR (Clic para abrir o descargar directo): ${qrImageUrl}`;
         }
-        
+
         window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
     };
 
@@ -288,19 +288,19 @@ const AttendeeList = () => {
     };
 
     const handleSendEmail = async (att) => {
-        if(!att.email) {
+        if (!att.email) {
             alert('Este asistente no tiene correo electrónico registrado.');
             return;
         }
         setSendingEmailId(att.id);
         try {
             const res = await axios.post(`${API_URL}/events/${eventId}/attendees/${att.id}/send-email`);
-            if(res.data.success) {
+            if (res.data.success) {
                 alert('Correo enviado exitosamente.');
             }
         } catch (err) {
             console.error('Error enviando correo:', err);
-            alert('Hubo un error enviando el correo. Verifica SMTP o reintenta.');
+            alert('en Desarrollo. PROXIMAMENTE');
         } finally {
             setSendingEmailId(null);
         }
@@ -375,7 +375,7 @@ const AttendeeList = () => {
                     <table className="attendee-table">
                         <thead>
                             <tr>
-                                <th style={{width: '30px', textAlign: 'center'}}>Sel.</th>
+                                <th style={{ width: '30px', textAlign: 'center' }}>Sel.</th>
                                 <th>Nombre Completo</th>
                                 <th>Contacto</th>
                                 <th>Llegada</th>
@@ -391,14 +391,14 @@ const AttendeeList = () => {
                             ) : (
                                 filteredAttendees.map(att => (
                                     <tr key={att.id} style={{ background: selectedPrintAttendees.find(a => a.id === att.id) ? 'rgba(139, 92, 246, 0.1)' : '' }}>
-                                        <td style={{textAlign: 'center'}}>
+                                        {/*<td style={{textAlign: 'center'}}>
                                             <input 
                                                 type="checkbox" 
                                                 checked={!!selectedPrintAttendees.find(a => a.id === att.id)}
                                                 onChange={() => toggleSelection(att)}
                                                 style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
-                                            />
-                                        </td>
+                                            /> 
+                                        </td>*/}
                                         <td>
                                             <div className="user-cell">
                                                 <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
@@ -414,8 +414,8 @@ const AttendeeList = () => {
                                         </td>
                                         <td>
                                             <div className="contact-cell">
-                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.2rem'}}><Mail size={14} className="cell-icon" /> {att.email || 'N/A'}</div>
-                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#94a3b8'}}><MessageCircle size={14} className="cell-icon" /> {att.phone || 'N/A'}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}><Mail size={14} className="cell-icon" /> {att.email || 'N/A'}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#94a3b8' }}><MessageCircle size={14} className="cell-icon" /> {att.phone || 'N/A'}</div>
                                             </div>
                                         </td>
                                         <td>
@@ -446,9 +446,9 @@ const AttendeeList = () => {
                                                 <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)} title="Enviar por WhatsApp">
                                                     <MessageCircle size={16} />
                                                 </button>
-                                                <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
+                                                {/*} <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
                                                     <Send size={16} />
-                                                </button>
+                                                </button>*/}
                                                 <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
                                                     <QrCode size={16} />
                                                 </button>
@@ -493,14 +493,14 @@ const AttendeeList = () => {
                             </div>
                             <div className="form-group">
                                 <label>Empresa (Opcional)</label>
-                                <input 
+                                <input
                                     list="companyListAdmin"
-                                    name="company" 
-                                    value={formData.company} 
-                                    onChange={handleInputChange} 
-                                    placeholder="Ej. Mi Empresa C.A." 
+                                    name="company"
+                                    value={formData.company}
+                                    onChange={handleInputChange}
+                                    placeholder="Ej. Mi Empresa C.A."
                                     onFocus={(e) => {
-                                        if (e.target.value === 'No Aplica') setFormData({...formData, company: ''});
+                                        if (e.target.value === 'No Aplica') setFormData({ ...formData, company: '' });
                                     }}
                                 />
                                 <datalist id="companyListAdmin">
@@ -565,17 +565,17 @@ const AttendeeList = () => {
                         </p>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             {Array(10).fill(null).map((_, idx) => (
-                                <div 
+                                <div
                                     key={idx}
                                     onClick={() => {
                                         setPrintStartingSlot(idx);
                                         setShowSlotModal(false);
                                         setIsPrinting(true);
                                     }}
-                                    style={{ 
-                                        border: '1px dashed rgba(255,255,255,0.2)', 
-                                        padding: '1.5rem', 
-                                        textAlign: 'center', 
+                                    style={{
+                                        border: '1px dashed rgba(255,255,255,0.2)',
+                                        padding: '1.5rem',
+                                        textAlign: 'center',
                                         cursor: 'pointer',
                                         borderRadius: '8px',
                                         background: 'rgba(0,0,0,0.2)',
@@ -589,9 +589,9 @@ const AttendeeList = () => {
                                 </div>
                             ))}
                         </div>
-                        <button 
-                            className="btn-cancel" 
-                            style={{ width: '100%', marginTop: '1.5rem' }} 
+                        <button
+                            className="btn-cancel"
+                            style={{ width: '100%', marginTop: '1.5rem' }}
                             onClick={() => setShowSlotModal(false)}
                         >
                             Cancelar
@@ -602,7 +602,7 @@ const AttendeeList = () => {
 
             {isPrinting && (
                 <div className="print-badges-wrapper is-printing">
-                    <PrintBadges 
+                    <PrintBadges
                         attendees={selectedPrintAttendees}
                         roomName={roomInfo?.name || 'General'}
                         startingSlot={printStartingSlot}

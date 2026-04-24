@@ -1,9 +1,10 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('./database');
-const path = require('path');
 const nodemailer = require('nodemailer');
 const QRCode = require('qrcode');
 
@@ -415,8 +416,8 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
 
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
-            port: process.env.SMTP_PORT,
-            secure: process.env.SMTP_PORT === '465',
+            port: parseInt(process.env.SMTP_PORT || '465'),
+            secure: (process.env.SMTP_PORT || '465').toString() === '465',
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS
