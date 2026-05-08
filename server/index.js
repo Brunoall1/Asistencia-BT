@@ -25,7 +25,7 @@ app.post('/api/utils/scrape', async (req, res) => {
         if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
             return res.status(400).json({ success: false, message: 'Invalid URL' });
         }
-        
+
         // Use native fetch to get the HTML
         const response = await fetch(url, {
             headers: {
@@ -202,7 +202,7 @@ app.get('/api/events/:eventId/attendees', async (req, res) => {
 app.get('/api/events/:eventId/companies', async (req, res) => {
     try {
         const result = await db.all(
-            `SELECT DISTINCT company FROM attendees WHERE event_id = ? AND company IS NOT NULL AND company != '' AND company != 'No Aplica' ORDER BY company ASC`, 
+            `SELECT DISTINCT company FROM attendees WHERE event_id = ? AND company IS NOT NULL AND company != '' AND company != 'No Aplica' ORDER BY company ASC`,
             [req.params.eventId]
         );
         const companies = result.map(r => r.company);
@@ -263,7 +263,7 @@ app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) =
         for (const att of attendees) {
             const id = uuidv4();
             const qr_code = crypto.createHash('md5').update(id + eventId + Date.now().toString()).digest('hex');
-            
+
             await db.run(
                 `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
@@ -286,7 +286,7 @@ app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) =
 app.post('/api/public/events/:eventId/register', async (req, res) => {
     const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
     const event_id = req.params.eventId;
-    
+
     if (!room_id || !first_name || !last_name) {
         return res.status(400).json({ success: false, message: 'Faltan campos requeridos.' });
     }
@@ -443,7 +443,7 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
                 .replace(/{sala}/g, room?.name || '')
                 .replace(/{qr}/g, `<a href="${qrUrl}">${qrUrl}</a>`)
                 .replace(/\\n/g, '<br/>'); // Preserve line breaks
-                
+
             htmlBody = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
                     <p>${parsedMessage}</p>
@@ -477,8 +477,8 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
             attachments: mailAttachments
         };
 
-        if(!process.env.SMTP_HOST || !process.env.SMTP_USER) {
-           return res.status(500).json({ success: false, message: 'Servidor SMTP no configurado en el archivo .env' });
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+            return res.status(500).json({ success: false, message: 'Servidor SMTP no configurado en el archivo .env' });
         }
 
         await transporter.sendMail(mailOptions);
@@ -498,7 +498,7 @@ app.get('/api/public/qr/:qrCode.png', async (req, res) => {
         const qrUrl = req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1')
             ? `http://${req.headers.host.replace('3001', '5173')}/show/${req.params.qrCode}`
             : `https://${req.headers.host}/show/${req.params.qrCode}`;
-            
+
         // Provide the generated PNG directly
         const buffer = await QRCode.toBuffer(qrUrl, { type: 'png', width: 300 });
         res.setHeader('Content-Type', 'image/png');
@@ -588,7 +588,7 @@ app.post('/api/admin/events', async (req, res) => {
     const { password } = req.body;
     try {
         if (!await verifyMasterPW(password)) return res.status(401).json({ success: false, message: 'No autorizado' });
-        
+
         const events = await db.all(`
             SELECT 
                 e.id, 
@@ -611,7 +611,7 @@ app.post('/api/admin/events/:eventId', async (req, res) => {
     const { eventId } = req.params;
     try {
         if (!await verifyMasterPW(password)) return res.status(401).json({ success: false, message: 'No autorizado' });
-        
+
         const event = await db.get(`SELECT id, name, access_code FROM events WHERE id = ?`, [eventId]);
         if (!event) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
 
@@ -632,16 +632,22 @@ app.post('/api/admin/events/:eventId', async (req, res) => {
     }
 });
 
-// Serve static files from the React frontend build
-app.use(express.static(path.join(__dirname, '../dist')));
+// API Health check
+app.get('/api/ping', (req, res) => {
+    res.send('API is alive and running on CPanel');
+});
+// SERVE FRONTEND - MUST BE AT THE BOTTOM
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
 
-// The "catchall" handler: for any request that doesn't
-// match one of the API routes, send back React's index.html file.
 app.get(/.*/, (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ success: false, message: 'API Route not found' });
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+// Archivo actualizado y listo para CPanel

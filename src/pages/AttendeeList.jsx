@@ -300,7 +300,7 @@ const AttendeeList = () => {
             }
         } catch (err) {
             console.error('Error enviando correo:', err);
-            alert('en Desarrollo. PROXIMAMENTE');
+            alert('Hubo un error enviando el correo. Verifica SMTP o reintenta.');
         } finally {
             setSendingEmailId(null);
         }
