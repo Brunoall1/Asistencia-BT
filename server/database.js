@@ -33,7 +33,7 @@ if (isPostgres) {
         },
         run: async (sql, params = []) => {
             const res = await pool.query(convertQuery(sql), params);
-            return res; 
+            return res;
         }
     };
 
@@ -78,6 +78,8 @@ if (isPostgres) {
                     id TEXT PRIMARY KEY,
                     event_id TEXT NOT NULL,
                     room_id TEXT NOT NULL,
+                    session_id TEXT, -- <-- NUEVA COLUMNA
+                    ci TEXT,         -- <-- NUEVA COLUMNA
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     email TEXT,
@@ -86,7 +88,7 @@ if (isPostgres) {
                     payment_method TEXT,
                     has_arrived BOOLEAN DEFAULT FALSE,
                     arrival_time TEXT,
-                    qr_code TEXT NOT NULL UNIQUE,
+                    qr_code TEXT NOT NULL,
                     status TEXT DEFAULT 'accepted',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
@@ -97,19 +99,24 @@ if (isPostgres) {
             try {
                 await pool.query(`ALTER TABLE attendees ADD COLUMN status TEXT DEFAULT 'accepted'`);
                 console.log('Added default status column to existing attendees table (PostgreSQL).');
-            } catch (err) {}
+            } catch (err) { }
+            try {
+                await pool.query(`ALTER TABLE attendees ADD COLUMN session_id TEXT`);
+                await pool.query(`ALTER TABLE attendees ADD COLUMN ci TEXT`);
+                console.log('Added session_id and ci columns to attendees table (PostgreSQL).');
+            } catch (err) { }
             try {
                 await pool.query(`ALTER TABLE attendees ADD COLUMN phone TEXT`);
-            } catch (err) {}
+            } catch (err) { }
             try {
                 await pool.query(`ALTER TABLE attendees ADD COLUMN company TEXT DEFAULT 'No Aplica'`);
-            } catch (err) {}
+            } catch (err) { }
             try {
                 await pool.query(`ALTER TABLE events ADD COLUMN dates TEXT`);
                 await pool.query(`ALTER TABLE events ADD COLUMN logo TEXT`);
                 await pool.query(`ALTER TABLE events ADD COLUMN custom_message TEXT`);
                 console.log('Added dates, logo, custom_message to events table (PostgreSQL).');
-            } catch (err) {}
+            } catch (err) { }
             try {
                 await pool.query(`ALTER TABLE attendees ADD COLUMN phone TEXT`);
                 console.log('Added phone column to existing attendees table (PostgreSQL).');
@@ -129,6 +136,7 @@ if (isPostgres) {
                     room_id TEXT NOT NULL,
                     name TEXT NOT NULL,
                     speaker TEXT NOT NULL,
+                    session_date TEXT NOT NULL,
                     start_time TEXT NOT NULL,
                     end_time TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -198,6 +206,8 @@ if (isPostgres) {
                     id TEXT PRIMARY KEY,
                     event_id TEXT NOT NULL,
                     room_id TEXT NOT NULL,
+                    session_id TEXT, -- <-- NUEVA COLUMNA
+                    ci TEXT,         -- <-- NUEVA COLUMNA
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     email TEXT,
@@ -206,7 +216,7 @@ if (isPostgres) {
                     payment_method TEXT,
                     has_arrived BOOLEAN DEFAULT 0,
                     arrival_time TEXT,
-                    qr_code TEXT NOT NULL UNIQUE,
+                    qr_code TEXT NOT NULL,
                     status TEXT DEFAULT 'accepted',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
@@ -218,9 +228,11 @@ if (isPostgres) {
             db.run(`ALTER TABLE attendees ADD COLUMN status TEXT DEFAULT 'accepted'`, (err) => {
                 if (!err) console.log('Added default status column to existing attendees table (SQLite).');
             });
-            db.run(`ALTER TABLE events ADD COLUMN dates TEXT`, () => {});
-            db.run(`ALTER TABLE events ADD COLUMN logo TEXT`, () => {});
-            db.run(`ALTER TABLE events ADD COLUMN custom_message TEXT`, () => {});
+            db.run(`ALTER TABLE attendees ADD COLUMN session_id TEXT`, () => { });
+            db.run(`ALTER TABLE attendees ADD COLUMN ci TEXT`, () => { });
+            db.run(`ALTER TABLE events ADD COLUMN dates TEXT`, () => { });
+            db.run(`ALTER TABLE events ADD COLUMN logo TEXT`, () => { });
+            db.run(`ALTER TABLE events ADD COLUMN custom_message TEXT`, () => { });
             db.run(`ALTER TABLE attendees ADD COLUMN phone TEXT`, (err) => {
                 if (!err) console.log('Added phone column to existing attendees table (SQLite).');
             });
@@ -234,6 +246,7 @@ if (isPostgres) {
                     room_id TEXT NOT NULL,
                     name TEXT NOT NULL,
                     speaker TEXT NOT NULL,
+                    session_date TEXT NOT NULL,
                     start_time TEXT NOT NULL,
                     end_time TEXT NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -263,7 +276,7 @@ if (isPostgres) {
         },
         run: (sql, params = []) => {
             return new Promise((resolve, reject) => {
-                db.run(sql, params, function(err) {
+                db.run(sql, params, function (err) {
                     if (err) reject(err);
                     else resolve(this);
                 });

@@ -18,6 +18,7 @@ const Schedule = () => {
         room_id: '',
         name: '',
         speaker: '',
+        session_date: '', // Añade esto
         start_time: '',
         end_time: ''
     });
@@ -138,7 +139,8 @@ const Schedule = () => {
                                                     <User size={14} /> <span>{course.speaker}</span>
                                                 </p>
                                                 <p className="time">
-                                                    <Clock size={14} /> <span>{course.start_time} - {course.end_time}</span>
+                                                    {/* AQUÍ MOSTRAMOS LA FECHA JUNTO A LA HORA */}
+                                                    <Clock size={14} /> <span>{course.session_date ? `${course.session_date} | ` : ''} {course.start_time} - {course.end_time}</span>
                                                 </p>
                                             </div>
                                         </div>
@@ -199,6 +201,19 @@ const Schedule = () => {
                                     onChange={handleInputChange}
                                     required
                                     placeholder="Ej. Ana Ruiz"
+                                    style={{ width: '100%', padding: '0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: 'white' }}
+                                />
+                            </div>
+
+                            {/* ESTE ES EL NUEVO CAMPO DE FECHA */}
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', color: '#cbd5e1', marginBottom: '0.5rem' }}>Fecha de la Charla</label>
+                                <input
+                                    type="date"
+                                    name="session_date"
+                                    value={formData.session_date || ''}
+                                    onChange={handleInputChange}
+                                    required
                                     style={{ width: '100%', padding: '0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: 'white' }}
                                 />
                             </div>

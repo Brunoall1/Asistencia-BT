@@ -28,12 +28,16 @@ const Dashboard = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
     const [rooms, setRooms] = useState([]);
+    const [sessions, setSessions] = useState([]); // 👉 ALMACENA TODAS LAS CHARLAS DEL EVENTO
     const [eventData, setEventData] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showQRModal, setShowQRModal] = useState(false);
     const [showAccessCode, setShowAccessCode] = useState(false);
     const [newRoomData, setNewRoomData] = useState({ name: '', conference: '', expected_capacity: '' });
+
     const [qrPrefill, setQrPrefill] = useState(null);
+    const [scannedUserData, setScannedUserData] = useState(null); // 👉 CONTROLA LA MODAL DE ITINERARIO (DOBLE CLIC)
+
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
     const [loading, setLoading] = useState(true);
 
@@ -45,13 +49,20 @@ const Dashboard = () => {
                 setEventData(eventRes.data.event);
             }
 
+            // Descargamos salas, sesiones y asistentes
             const roomsRes = await axios.get(`${API_URL}/events/${eventId}/rooms`);
-            const attendeesRes = await axios.get(`${API_URL}/events/${eventId}/attendees`);
+            const attendeesRes = await axios.get(`${API_URL}/events/${eventId}/attendees?t=${Date.now()}`);
+
+            try {
+                const sessRes = await axios.get(`${API_URL}/events/${eventId}/sessions`);
+                if (sessRes.data && sessRes.data.success) {
+                    setSessions(sessRes.data.sessions);
+                }
+            } catch (e) { console.error('Error fetching sessions:', e); }
 
             if (roomsRes.data.success) {
                 const fetchedRooms = roomsRes.data.rooms;
                 const rawAttendees = attendeesRes.data.success ? attendeesRes.data.attendees : [];
-                // ONLY count accepted attendees for Dashboard charts and metrics
                 const allAttendees = rawAttendees.filter(a => a.status === 'accepted' || !a.status);
 
                 const formattedRooms = fetchedRooms.map(r => {
@@ -62,13 +73,11 @@ const Dashboard = () => {
                     const notArrivedCount = registeredCount - arrivedCount;
                     const availableCapacity = Math.max(0, r.expected_capacity - registeredCount);
 
-                    // Chart data representing attendance funnel
                     const pieData = [];
                     if (arrivedCount > 0) pieData.push({ name: 'Llegaron', value: arrivedCount, color: '#10b981' });
                     if (notArrivedCount > 0) pieData.push({ name: 'Por llegar', value: notArrivedCount, color: '#f59e0b' });
                     if (availableCapacity > 0) pieData.push({ name: 'Disponibles', value: availableCapacity, color: '#3b82f6' });
 
-                    // Fallback to empty chart if no expecting attendees
                     if (pieData.length === 0) pieData.push({ name: 'Vacío', value: 1, color: '#334155' });
 
                     return {
@@ -83,7 +92,6 @@ const Dashboard = () => {
             }
         } catch (err) {
             console.error('Error fetching data:', err);
-            // If the event doesn't exist (e.g., database was reset), redirect to Home
             if (err.response && err.response.status === 404) {
                 alert('El evento ya no existe o fue eliminado.');
                 navigate('/');
@@ -118,7 +126,7 @@ const Dashboard = () => {
             if (res.data.success) {
                 setShowAddModal(false);
                 setNewRoomData({ name: '', conference: '', expected_capacity: '' });
-                fetchData(); // Refresh list
+                fetchData();
             }
         } catch (err) {
             console.error('Error adding room:', err);
@@ -126,30 +134,33 @@ const Dashboard = () => {
     };
 
     const handleQRScanned = async (decodedText) => {
-        setShowQRModal(false); // Close scanner immediately
-        
+        setShowQRModal(false);
+
         let textToParse = decodedText;
-        
-        // Fast-path for internal platform generated QR codes
+
+        // --- 🎯 FLUJO A: QR INTERNO -> CONSULTAMOS ITINERARIO ---
         if (decodedText.includes('/show/')) {
             try {
                 const hashMatch = decodedText.match(/\/show\/([a-zA-Z0-9]+)/);
                 if (hashMatch && hashMatch[1]) {
                     const qrHash = hashMatch[1];
-                    const checkRes = await axios.put(`${API_URL}/public/attendee/${qrHash}/arrival`);
-                    if (checkRes.data.success) {
-                        alert(`🎟️ ¡Asistencia Marcada Exitosamente para ${checkRes.data.attendee.first_name} ${checkRes.data.attendee.last_name}!`);
-                        fetchData();
-                        return; // Stop the flow here, check-in done seamlessly
+
+                    // Consultamos el nuevo endpoint del backend
+                    const lookupRes = await axios.get(`${API_URL}/events/${eventId}/scan-lookup/${qrHash}`);
+
+                    if (lookupRes.data.success) {
+                        // Abrimos la modal con la lista de charlas de este usuario
+                        setScannedUserData(lookupRes.data);
+                        return;
                     }
                 }
             } catch (err) {
-                alert('Hubo un error verificando el código interno. Podría ser un invitado no registrado.');
+                alert('Pase QR no válido para este evento o no tiene charlas asignadas.');
                 return;
             }
         }
 
-        // Check if QR is an external ticket URL needing Web Scraping
+        // --- FLUJO B: QR EXTERNO / SCRAPING ---
         if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
             setIsFetchingUrl(true);
             try {
@@ -157,7 +168,6 @@ const Dashboard = () => {
                 if (scrapeRes.data.success) {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(scrapeRes.data.html, 'text/html');
-                    // Extract text but retain some inner spacing
                     textToParse = doc.body.innerText || decodedText;
                 }
             } catch (err) {
@@ -165,24 +175,20 @@ const Dashboard = () => {
             }
             setIsFetchingUrl(false);
         }
-        
+
         let roomId = '';
         let firstName = '';
         let lastName = '';
-        
-        // Advanced Custom Regex based on typical ticket platforms like BrandingTicket
-        // Pattern: "Nombre: [Rest of the line]"
+
         const nombreMatch = textToParse.match(/Nombre:\s*([^\n\r]+)/i);
         if (nombreMatch) {
             const rawName = nombreMatch[1].trim();
-            // Split name nicely: "Blanca Dubuc de Quintana" -> Blanca (First), Dubuc de Quintana (Last)
             const parts = rawName.split(/\s+/).filter(Boolean);
             firstName = parts[0] || '';
             lastName = parts.slice(1).join(' ') || '';
         } else {
-            // Fallback generic parse logic
             let genericName = textToParse.replace(/nombre:|name:|sala:|room:|-|,|;/ig, ' ').trim();
-            const sortedRooms = [...rooms].sort((a,b) => b.name.length - a.name.length);
+            const sortedRooms = [...rooms].sort((a, b) => b.name.length - a.name.length);
             for (const r of sortedRooms) {
                 if (genericName.toLowerCase().includes(r.name.toLowerCase())) {
                     genericName = genericName.replace(new RegExp(r.name, 'ig'), '').trim();
@@ -192,22 +198,23 @@ const Dashboard = () => {
             firstName = parts[0] || '';
             lastName = parts.slice(1).join(' ') || '';
         }
-        
-        // Pattern for Rooms: Try to match from the parsed text text
-        const sortedRooms = [...rooms].sort((a,b) => b.name.length - a.name.length);
+
+        const sortedRooms = [...rooms].sort((a, b) => b.name.length - a.name.length);
         for (const r of sortedRooms) {
             if (textToParse.toLowerCase().includes(r.name.toLowerCase())) {
                 roomId = r.id;
                 break;
             }
         }
-        
+
+        // Pre-llenamos el formulario externo asegurando la propiedad session_id
         setQrPrefill({
             first_name: firstName,
             last_name: lastName,
             email: '',
             payment_method: 'Efectivo',
-            room_id: roomId
+            room_id: roomId,
+            session_id: '' // Inicializamos vacío para forzar su selección
         });
     };
 
@@ -218,19 +225,24 @@ const Dashboard = () => {
                 alert('Por favor selecciona una sala para este asistente.');
                 return;
             }
-            // Create attendee
+            if (!qrPrefill.session_id) {
+                alert('Por favor selecciona la charla específica a la que ingresa.');
+                return;
+            }
+
+            // Creamos al asistente
             const res = await axios.post(`${API_URL}/events/${eventId}/attendees`, qrPrefill);
             if (res.data.success) {
                 const newId = res.data.attendee.id;
-                // Automatically mark as arrived
+                // Marcamos su llegada automáticamente a esa fila individual
                 await axios.put(`${API_URL}/events/${eventId}/attendees/${newId}/arrival`);
-                
+
                 setQrPrefill(null);
-                fetchData(); // Refresh metrics
+                fetchData();
             }
         } catch (err) {
             console.error('Error adding from QR:', err);
-            alert('Hubo un error al guardar el asistente.');
+            alert('Hubo un error al guardar el asistente. Es posible que ya esté registrado en este horario.');
         }
     };
 
@@ -240,7 +252,6 @@ const Dashboard = () => {
 
     return (
         <div className="dashboard-container">
-            {/* Background Effects */}
             <div className="background-mesh"></div>
             <div className="glow-orb orb-1"></div>
             <div className="glow-orb orb-2"></div>
@@ -305,56 +316,49 @@ const Dashboard = () => {
                     <div style={{ color: 'white', padding: '2rem', background: 'rgba(255,255,255,0.05)', borderRadius: '1rem', gridColumn: '1/-1', textAlign: 'center' }}>
                         Aún no hay salones creados. Haz clic en "Agregar Sala" para comenzar.
                     </div>
-                ) : rooms.map((room, roomIndex) => {
-
-                    return (
-                        <div key={room.id} className="chart-card">
-                            <div className="card-header">
-                                <div className="room-info">
-                                    <MapPin size={20} className="room-icon" />
-                                    <h2>{room.name}</h2>
-                                </div>
-                                <div className="total-badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                                    <span>Llegadas: {room.arrived_count} / {room.expected_capacity}</span>
-                                </div>
+                ) : rooms.map((room, roomIndex) => (
+                    <div key={room.id} className="chart-card">
+                        <div className="card-header">
+                            <div className="room-info">
+                                <MapPin size={20} className="room-icon" />
+                                <h2>{room.name}</h2>
                             </div>
-
-                            <div className="chart-wrapper">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={room.data}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={90}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            stroke="none"
-                                            onClick={(data) => handleSliceClick(data, roomIndex)}
-                                            style={{ cursor: 'pointer' }}
-                                        >
-                                            {room.data.map((entry, index) => (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={entry.color}
-                                                    className="pie-slice"
-                                                />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend
-                                            verticalAlign="bottom"
-                                            height={36}
-                                            iconType="circle"
-                                            formatter={(value) => <span className="legend-text">{value}</span>}
-                                        />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                            <div className="total-badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                                <span>Llegadas: {room.arrived_count} / {room.expected_capacity}</span>
                             </div>
                         </div>
-                    );
-                })}
+
+                        <div className="chart-wrapper">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={room.data}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={90}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                        stroke="none"
+                                        onClick={(data) => handleSliceClick(data, roomIndex)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        {room.data.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} className="pie-slice" />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend
+                                        verticalAlign="bottom"
+                                        height={36}
+                                        iconType="circle"
+                                        formatter={(value) => <span className="legend-text">{value}</span>}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {showAddModal && (
@@ -367,45 +371,19 @@ const Dashboard = () => {
                         <form onSubmit={handleAddRoom} className="add-room-form">
                             <div className="form-group">
                                 <label htmlFor="roomName">Nombre de la Sala</label>
-                                <input
-                                    id="roomName"
-                                    type="text"
-                                    placeholder="Ej. Salón Alpha"
-                                    value={newRoomData.name}
-                                    onChange={(e) => setNewRoomData({ ...newRoomData, name: e.target.value })}
-                                    required
-                                />
+                                <input id="roomName" type="text" placeholder="Ej. Salón Alpha" value={newRoomData.name} onChange={(e) => setNewRoomData({ ...newRoomData, name: e.target.value })} required />
                             </div>
                             <div className="form-group">
                                 <label htmlFor="conferenceName">Nombre de la Conferencia</label>
-                                <input
-                                    id="conferenceName"
-                                    type="text"
-                                    placeholder="Ej. Introducción a React"
-                                    value={newRoomData.conference}
-                                    onChange={(e) => setNewRoomData({ ...newRoomData, conference: e.target.value })}
-                                    required
-                                />
+                                <input id="conferenceName" type="text" placeholder="Ej. Introducción a React" value={newRoomData.conference} onChange={(e) => setNewRoomData({ ...newRoomData, conference: e.target.value })} required />
                             </div>
                             <div className="form-group">
                                 <label htmlFor="expectedCapacity">Aforo Esperado</label>
-                                <input
-                                    id="expectedCapacity"
-                                    type="number"
-                                    placeholder="Ej. 50"
-                                    min="1"
-                                    value={newRoomData.expected_capacity}
-                                    onChange={(e) => setNewRoomData({ ...newRoomData, expected_capacity: e.target.value })}
-                                    required
-                                />
+                                <input id="expectedCapacity" type="number" placeholder="Ej. 50" min="1" value={newRoomData.expected_capacity} onChange={(e) => setNewRoomData({ ...newRoomData, expected_capacity: e.target.value })} required />
                             </div>
                             <div className="modal-actions">
-                                <button type="button" className="btn-cancel" onClick={() => setShowAddModal(false)}>
-                                    Cancelar
-                                </button>
-                                <button type="submit" className="btn-submit">
-                                    Guardar Sala
-                                </button>
+                                <button type="button" className="btn-cancel" onClick={() => setShowAddModal(false)}>Cancelar</button>
+                                <button type="submit" className="btn-submit">Guardar Sala</button>
                             </div>
                         </form>
                     </div>
@@ -413,11 +391,7 @@ const Dashboard = () => {
             )}
 
             {showQRModal && (
-                <QRScannerModal
-                    eventId={eventId}
-                    onClose={() => setShowQRModal(false)}
-                    onScanSuccess={handleQRScanned}
-                />
+                <QRScannerModal eventId={eventId} onClose={() => setShowQRModal(false)} onScanSuccess={handleQRScanned} />
             )}
 
             {isFetchingUrl && (
@@ -429,38 +403,70 @@ const Dashboard = () => {
                 </div>
             )}
 
+            {/* ==================================================================== */}
+            {/* 🎯 FORMULARIO DE INGRESO MANUAL / QR EXTERNO CON SELECT DE CHARLA   */}
+            {/* ==================================================================== */}
             {qrPrefill && (
                 <div className="modal-overlay" onClick={() => setQrPrefill(null)}>
                     <div className="modal-content" style={{ background: '#1e293b', padding: '2rem', borderRadius: '16px', width: '100%', maxWidth: '500px', border: '1px solid rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
                         <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
-                            <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Nuevo Asistente (QR)</h2>
+                            <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Nuevo Asistente (QR Externo)</h2>
                             <button className="close-btn" onClick={() => setQrPrefill(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
                         </div>
                         <form onSubmit={handleSaveQRAttendee} className="crud-form" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                     <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Nombre</label>
-                                    <input type="text" value={qrPrefill.first_name} onChange={e => setQrPrefill({...qrPrefill, first_name: e.target.value})} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}/>
+                                    <input type="text" value={qrPrefill.first_name} onChange={e => setQrPrefill({ ...qrPrefill, first_name: e.target.value })} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
                                 </div>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                     <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Apellido</label>
-                                    <input type="text" value={qrPrefill.last_name} onChange={e => setQrPrefill({...qrPrefill, last_name: e.target.value})} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}/>
+                                    <input type="text" value={qrPrefill.last_name} onChange={e => setQrPrefill({ ...qrPrefill, last_name: e.target.value })} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
                                 </div>
                             </div>
+
+                            {/* Selección de Sala */}
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Sala Destino</label>
-                                <select value={qrPrefill.room_id} onChange={e => setQrPrefill({...qrPrefill, room_id: e.target.value})} required style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
+                                <select
+                                    value={qrPrefill.room_id}
+                                    onChange={e => setQrPrefill({ ...qrPrefill, room_id: e.target.value, session_id: '' })}
+                                    required
+                                    style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                >
                                     <option value="">Seleccionar Sala...</option>
                                     {rooms.map(r => <option value={r.id} key={r.id}>{r.name}</option>)}
                                 </select>
                             </div>
+
+                            {/* 👉 NUEVO: Selección Dinámica de Charla */}
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Charla / Horario de Ingreso</label>
+                                <select
+                                    value={qrPrefill.session_id}
+                                    onChange={e => setQrPrefill({ ...qrPrefill, session_id: e.target.value })}
+                                    required
+                                    style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                >
+                                    <option value="" disabled>Selecciona la charla...</option>
+                                    {sessions
+                                        .filter(s => String(s.room_id) === String(qrPrefill.room_id))
+                                        .map(s => (
+                                            <option key={s.id} value={s.id}>
+                                                {s.session_date ? `${s.session_date} | ` : ''} {s.start_time} - {s.name} ({s.speaker})
+                                            </option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Correo Electrónico (Opcional)</label>
-                                <input type="email" value={qrPrefill.email} onChange={e => setQrPrefill({...qrPrefill, email: e.target.value})} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}/>
+                                <input type="email" value={qrPrefill.email} onChange={e => setQrPrefill({ ...qrPrefill, email: e.target.value })} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Método de Pago</label>
-                                <select value={qrPrefill.payment_method} onChange={e => setQrPrefill({...qrPrefill, payment_method: e.target.value})} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
+                                <select value={qrPrefill.payment_method} onChange={e => setQrPrefill({ ...qrPrefill, payment_method: e.target.value })} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
                                     <option value="Efectivo">Efectivo</option>
                                     <option value="Tarjeta">Tarjeta</option>
                                     <option value="Transferencia">Transferencia</option>
@@ -472,6 +478,110 @@ const Dashboard = () => {
                                 <button type="submit" style={{ padding: '0.75rem 1.5rem', background: '#3b82f6', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Guardar e Ingresar</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ==================================================================== */}
+            {/* 🎯 PANEL DE CONTROL EN PUERTA: ITINERARIO ESCANEADO (DOBLE CLIC)    */}
+            {/* ==================================================================== */}
+            {scannedUserData && (
+                <div className="modal-overlay" onClick={() => setScannedUserData(null)}>
+                    <div className="modal-content glass-panel" style={{ background: '#0f172a', padding: '2rem', borderRadius: '16px', maxWidth: '550px', width: '100%', border: '1px solid #334155' }} onClick={e => e.stopPropagation()}>
+
+                        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+                            <span style={{ background: '#3b82f6', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                                Pase Verificado
+                            </span>
+                            <h2 style={{ color: 'white', fontSize: '1.5rem', margin: '0.5rem 0 0.2rem 0' }}>
+                                👤 {scannedUserData.user.first_name} {scannedUserData.user.last_name}
+                            </h2>
+                            <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>
+                                C.I: {scannedUserData.user.ci || 'N/A'} | Correo: {scannedUserData.user.email}
+                            </p>
+                        </div>
+
+                        <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                            <p style={{ color: '#60a5fa', fontSize: '0.85rem', margin: 0 }}>
+                                💡 <strong>Instrucción en puerta:</strong> Haz <b>doble clic</b> sobre la charla a la que está entrando el participante para registrar su hora de acceso.
+                            </p>
+                        </div>
+
+                        <h3 style={{ color: '#cbd5e1', fontSize: '1rem', marginBottom: '0.8rem' }}>
+                            Itinerario Inscrito ({scannedUserData.sessions.length}):
+                        </h3>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                            {scannedUserData.sessions.map((session) => (
+                                <div
+                                    key={session.attendee_row_id}
+                                    onDoubleClick={async () => {
+                                        if (!session.has_arrived) {
+                                            try {
+                                                // Marcamos la llegada exclusivamente a este ID de fila
+                                                const res = await axios.put(`${API_URL}/events/${eventId}/attendees/${session.attendee_row_id}/arrival`);
+                                                if (res.data.success) {
+                                                    const updatedSessions = scannedUserData.sessions.map(s =>
+                                                        s.attendee_row_id === session.attendee_row_id
+                                                            ? { ...s, has_arrived: true, arrival_time: res.data.attendee.arrival_time }
+                                                            : s
+                                                    );
+                                                    setScannedUserData({ ...scannedUserData, sessions: updatedSessions });
+                                                    fetchData();
+                                                }
+                                            } catch (err) {
+                                                alert('Error al registrar la entrada.');
+                                            }
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '1rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #334155',
+                                        background: session.has_arrived ? 'rgba(16, 185, 129, 0.15)' : 'rgba(0,0,0,0.4)',
+                                        borderColor: session.has_arrived ? 'rgba(16, 185, 129, 0.4)' : '#334155',
+                                        cursor: session.has_arrived ? 'default' : 'pointer',
+                                        userSelect: 'none',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    title={session.has_arrived ? "Entrada ya registrada" : "Haz doble clic para confirmar entrada"}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                        <div>
+                                            <strong style={{ color: 'white', display: 'block', fontSize: '1.05rem' }}>
+                                                💬 {session.session_name}
+                                            </strong>
+                                            <span style={{ color: '#94a3b8', fontSize: '0.85rem', display: 'block', marginTop: '0.2rem' }}>
+                                                📍 {session.room_name} | Ponente: {session.speaker}
+                                            </span>
+                                            <span style={{ color: '#64748b', fontSize: '0.8rem', display: 'block' }}>
+                                                📅 {session.session_date} ({session.start_time} - {session.end_time})
+                                            </span>
+                                        </div>
+
+                                        <div>
+                                            {session.has_arrived ? (
+                                                <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '0.3rem 0.6rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'inline-block' }}>
+                                                    ✅ Llegó ({session.arrival_time})
+                                                </span>
+                                            ) : (
+                                                <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '0.3rem 0.6rem', borderRadius: '20px', fontSize: '0.8rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                                                    ⏳ Esperando
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <button
+                            className="primary-btn mt-4"
+                            style={{ width: '100%', padding: '0.8rem', borderRadius: '8px' }}
+                            onClick={() => setScannedUserData(null)}
+                        >
+                            Cerrar Panel
+                        </button>
                     </div>
                 </div>
             )}

@@ -10,8 +10,6 @@ import './AttendeeList.css';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const AttendeeList = () => {
-    // Note: The route is /event/:eventId/attendees/:courseId where courseId is the room ID. 
-    // Wait, the router path is `/event/:eventId/attendees/:courseId`.
     const { eventId, courseId: roomId } = useParams();
     const navigate = useNavigate();
 
@@ -35,7 +33,9 @@ const AttendeeList = () => {
     const [formData, setFormData] = useState({
         first_name: '',
         last_name: '',
+        ci: '',
         email: '',
+        session_id: '',
         phone: '',
         company: 'No Aplica',
         payment_method: 'Efectivo',
@@ -44,13 +44,13 @@ const AttendeeList = () => {
 
     const [sendingEmailId, setSendingEmailId] = useState(null);
     const [companies, setCompanies] = useState([]);
+    const [sessions, setSessions] = useState([]);
 
     const fetchAttendees = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/events/${eventId}/attendees`);
+            const res = await axios.get(`${API_URL}/events/${eventId}/attendees?t=${Date.now()}`);
             if (res.data.success) {
-                // Filter by the specific room (cast to String to avoid strict equality issues between number/string)
                 const roomAttendees = res.data.attendees.filter(att => String(att.room_id) === String(roomId));
                 setAttendees(roomAttendees);
             }
@@ -64,6 +64,16 @@ const AttendeeList = () => {
             const eventRes = await axios.get(`${API_URL}/events/${eventId}`);
             if (eventRes.data.success) {
                 setEventInfo(eventRes.data.event);
+            }
+
+            try {
+                const sessionsRes = await axios.get(`${API_URL}/events/${eventId}/sessions`);
+                if (sessionsRes.data && sessionsRes.data.success) {
+                    const roomSessions = sessionsRes.data.sessions.filter(s => String(s.room_id) === String(roomId));
+                    setSessions(roomSessions);
+                }
+            } catch (e) {
+                console.error('Error fetching sessions:', e);
             }
 
             try {
@@ -97,16 +107,21 @@ const AttendeeList = () => {
     }, [searchTerm, attendees]);
 
     const handleExportExcel = () => {
-        const dataToExport = filteredAttendees.map(att => ({
-            'Nombre': att.first_name,
-            'Apellido': att.last_name,
-            'Correo': att.email || 'N/A',
-            'WhatsApp': att.phone || 'N/A',
-            'Empresa': att.company || 'No Aplica',
-            'Método Pago': att.payment_method || 'Efectivo',
-            'Hora Llegada': att.has_arrived ? att.arrival_time : 'Aún no llega',
-            'URL Validar Asistencia (Seguridad)': `${window.location.origin}/show/${att.qr_code}`
-        }));
+        const dataToExport = filteredAttendees.map(att => {
+            // Buscamos el nombre de la charla asignada para colocarlo en el Excel
+            const sessionObj = sessions.find(s => String(s.id) === String(att.session_id));
+            return {
+                'Nombre': att.first_name,
+                'Apellido': att.last_name,
+                'Correo': att.email || 'N/A',
+                'WhatsApp': att.phone || 'N/A',
+                'Empresa': att.company || 'No Aplica',
+                'Charla Asignada': sessionObj ? `${sessionObj.name} (${sessionObj.speaker})` : 'General / Sin Asignar',
+                'Método Pago': att.payment_method || 'Efectivo',
+                'Hora Llegada': att.has_arrived ? att.arrival_time : 'Aún no llega',
+                'URL Validar Asistencia (Seguridad)': `${window.location.origin}/show/${att.qr_code}`
+            };
+        });
 
         const ws = XLSX.utils.json_to_sheet(dataToExport);
         const wb = XLSX.utils.book_new();
@@ -132,7 +147,6 @@ const AttendeeList = () => {
                 const ws = wb.Sheets[wsname];
                 const data = XLSX.utils.sheet_to_json(ws);
 
-                // Map Excel Columns -> Supported arrays for SQLite Bulk loop
                 const mappedAttendees = data.map(row => ({
                     first_name: row['Nombre'] || row['Nombres'] || row['First Name'] || '',
                     last_name: row['Apellido'] || row['Apellidos'] || row['Last Name'] || '',
@@ -161,14 +175,11 @@ const AttendeeList = () => {
             }
         };
         reader.readAsBinaryString(file);
-
-        // Reset unmounted payload references so repeat uploads work flawlessly
         e.target.value = null;
     };
 
     const openModal = (attendee = null) => {
         if (attendee) {
-            // Edit is not explicitly implemented in backend yet, but we can set form for future
             setEditingId(attendee.id);
             setFormData(attendee);
         } else {
@@ -176,7 +187,9 @@ const AttendeeList = () => {
             setFormData({
                 first_name: '',
                 last_name: '',
+                ci: '',
                 email: '',
+                session_id: '',
                 phone: '',
                 company: 'No Aplica',
                 payment_method: 'Efectivo',
@@ -200,13 +213,11 @@ const AttendeeList = () => {
         e.preventDefault();
         try {
             if (editingId) {
-                // UPDATE
                 const res = await axios.put(`${API_URL}/events/${eventId}/attendees/${editingId}`, formData);
                 if (res.data.success) {
                     fetchAttendees();
                 }
             } else {
-                // CREATE
                 const res = await axios.post(`${API_URL}/events/${eventId}/attendees`, formData);
                 if (res.data.success) {
                     fetchAttendees();
@@ -232,35 +243,56 @@ const AttendeeList = () => {
     };
 
     const handleDelete = (id) => {
-        // DELETE log: not included in backend request.
         if (window.confirm('La eliminación requiere una ruta DELETE en backend. ¿Omitir por ahora?')) {
-            // Fake delete from UI
             setAttendees(attendees.filter(att => att.id !== id));
         }
     };
 
-    const handleSendWA = (att) => {
+    const handleSendWA = async (att) => {
         if (!att.phone) {
             alert('Este asistente no tiene un número registrado.');
             return;
         }
-        const cleanPhone = att.phone.replace(/\\D/g, '');
-        const eventName = roomInfo?.conference_name || 'nuestro evento';
-        const roomName = roomInfo?.name || 'nuestra sala';
+        const cleanPhone = att.phone.replace(/\D/g, '');
+        const eventName = eventInfo?.name || roomInfo?.conference_name || 'nuestro evento';
         const qrUrl = `${window.location.origin}/show/${att.qr_code}`;
         const qrImageUrl = `${window.location.origin}/api/public/qr/${att.qr_code}.png`;
 
+        let itineraryText = '';
+
+        try {
+            // 1. Consultamos el itinerario completo usando el endpoint público que ya actualizamos
+            const res = await axios.get(`${API_URL}/public/attendee/${att.qr_code}`);
+            if (res.data.success && res.data.sessions) {
+                // Armamos la lista usando formato nativo de WhatsApp (*negrita*)
+                itineraryText = res.data.sessions.map(s =>
+                    `📌 *${s.session_name}*%0A📍 Salón: ${s.room_name}%0A📅 ${s.session_date || ''} ⏰ ${s.start_time} - ${s.end_time}`
+                ).join('%0A%0A');
+            }
+        } catch (err) {
+            console.error('Error descargando itinerario para WA:', err);
+            // Fallback de seguridad por si falla la red
+            itineraryText = `📌 *Charla en ${roomInfo?.name || 'Salón'}*`;
+        }
+
         let message = '';
+
         if (eventInfo?.custom_message) {
             let userMsg = eventInfo.custom_message
                 .replace(/{nombre}/g, `${att.first_name} ${att.last_name}`)
-                .replace(/{sala}/g, roomName)
+                .replace(/{sala}/g, roomInfo?.name || '')
+                .replace(/{charlas}/g, itineraryText) // 👉 Soporte para la nueva etiqueta
                 .replace(/{qr}/g, qrUrl)
-                .replace(/\\n/g, '%0A');
+                .replace(/\n/g, '%0A');
 
-            message = `${userMsg} %0A%0AImagen de tu QR: ${qrImageUrl}`;
+            // Si el administrador no puso la etiqueta {charlas} en el texto, se la anexamos al final
+            if (!eventInfo.custom_message.includes('{charlas}')) {
+                userMsg += `%0A%0A*Tu Itinerario Confirmado:*%0A${itineraryText}`;
+            }
+
+            message = `${userMsg} %0A%0A*Imagen de tu QR:* ${qrImageUrl}`;
         } else {
-            message = `Hola ${att.first_name} ${att.last_name}, te comparto tu qr de acceso al evento "${eventName}" que fuiste registrado en la sala "${roomName}". %0A%0ATu pase web: ${qrUrl} %0A%0AImagen de tu QR (Clic para abrir o descargar directo): ${qrImageUrl}`;
+            message = `¡Hola ${att.first_name} ${att.last_name}! Te compartimos tu pase oficial para el evento *"${eventName}"*.%0A%0A*Tu Itinerario Confirmado:*%0A${itineraryText}%0A%0A🔗 *Tu pase digital web:*%0A${qrUrl}%0A%0A🖼️ *Imagen de tu QR* (Clic para abrir o descargar directo):%0A${qrImageUrl}`;
         }
 
         window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
@@ -306,8 +338,13 @@ const AttendeeList = () => {
         }
     };
 
-    const safeArrivedCount = attendees.filter(a => String(a.has_arrived) === "1" || a.has_arrived === true || String(a.has_arrived) === "true").length;
-    const safeCapacity = roomInfo?.expected_capacity || 0;
+    // --- 🎯 AGRUPACIÓN DE ASISTENTES POR CHARLA ---
+    const attendeesBySession = filteredAttendees.reduce((acc, att) => {
+        const key = att.session_id || 'unassigned';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(att);
+        return acc;
+    }, {});
 
     return (
         <div className="attendee-container">
@@ -363,105 +400,205 @@ const AttendeeList = () => {
                     />
                 </div>
                 <div className="stats">
-                    {/*  <pan>Llegadas: <strong style={{ color: '#10b981' }}>{safeArrivedCount} / {safeCapacity}</strong> aforo esperado</span--> */}
-                    <span>Total Registrados: <strong>{attendees.length}</strong></span>
+                    <span>Total Registrados en Sala: <strong>{attendees.length}</strong></span>
                 </div>
             </div>
 
             {loading ? (
                 <div style={{ color: 'white', padding: '2rem' }}>Cargando asistentes...</div>
             ) : (
-                <div className="table-wrapper">
-                    <table className="attendee-table">
-                        <thead>
-                            <tr>
-                                {/*} <th style={{ width: '30px', textAlign: 'center' }}>Sel.</th> */}
-                                <th>Nombre Completo</th>
-                                <th>Contacto</th>
-                                <th>Llegada</th>
-                                <th>Pago</th>
-                                <th className="action-col">QR/Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredAttendees.length === 0 ? (
-                                <tr>
-                                    <td colSpan="6" className="empty-state">No se encontraron asistentes para este salón.</td>
-                                </tr>
-                            ) : (
-                                filteredAttendees.map(att => (
-                                    <tr key={att.id} style={{ background: selectedPrintAttendees.find(a => a.id === att.id) ? 'rgba(139, 92, 246, 0.1)' : '' }}>
-                                        {/*<td style={{textAlign: 'center'}}>
-                                            <input 
-                                                type="checkbox" 
-                                                checked={!!selectedPrintAttendees.find(a => a.id === att.id)}
-                                                onChange={() => toggleSelection(att)}
-                                                style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
-                                            /> 
-                                        </td>*/}
-                                        <td>
-                                            <div className="user-cell">
-                                                <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
-                                                <div className="user-name">
-                                                    <span className="first-name">{att.first_name} {att.last_name}</span>
-                                                    {(att.company && att.company !== 'No Aplica') ? (
-                                                        <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{att.company}</span>
-                                                    ) : (
-                                                        <span className="last-name"></span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div className="contact-cell">
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}><Mail size={14} className="cell-icon" /> {att.email || 'N/A'}</div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#94a3b8' }}><MessageCircle size={14} className="cell-icon" /> {att.phone || 'N/A'}</div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            {att.has_arrived ? (
-                                                <div className="time-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-                                                    <Clock size={14} />
-                                                    {att.arrival_time}
-                                                </div>
-                                            ) : (
-                                                <div className="time-badge">
-                                                    -- : --
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className={`payment-badge payment-${att.payment_method?.toLowerCase() || 'efectivo'}`}>
-                                                <CreditCard size={14} />
-                                                {att.payment_method}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div className="action-buttons">
-                                                {!att.has_arrived && (
-                                                    <button className="edit-btn" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }} onClick={() => handleCheckIn(att.id)} title="Marcar Llegada Manual">
-                                                        <Clock size={16} />
-                                                    </button>
-                                                )}
-                                                <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)} title="Enviar por WhatsApp">
-                                                    <MessageCircle size={16} />
-                                                </button>
-                                                <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
-                                                    <Send size={16} />
-                                                </button>
-                                                <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
-                                                    <QrCode size={16} />
-                                                </button>
-                                                <button className="delete-btn" onClick={() => handleDelete(att.id)} title="Eliminar">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
+                <div className="sessions-tables-container" style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
+
+                    {/* Si no hay charlas registradas ni asistentes, mostramos un estado vacío global */}
+                    {sessions.length === 0 && filteredAttendees.length === 0 ? (
+                        <div className="table-wrapper">
+                            <table className="attendee-table">
+                                <tbody>
+                                    <tr>
+                                        <td colSpan="5" className="empty-state">No hay charlas configuradas ni asistentes en este salón.</td>
                                     </tr>
-                                ))
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <>
+                            {/* 👉 ITERAMOS POR CADA CHARLA DISPONIBLE EN LA SALA */}
+                            {sessions.map((sessionObj) => {
+                                const currentSessionAttendees = attendeesBySession[sessionObj.id] || [];
+
+                                return (
+                                    <div key={sessionObj.id} className="session-group-section">
+
+                                        {/* Encabezado elegante de la Charla */}
+                                        <div className="session-header-bar" style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid #334155', borderBottom: 'none', padding: '1rem 1.5rem', borderTopLeftRadius: '12px', borderTopRightRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                                            <div>
+                                                <h3 style={{ margin: 0, color: 'white', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                                    💬 {sessionObj.name}
+                                                </h3>
+                                                <p style={{ margin: '0.2rem 0 0 0', color: '#94a3b8', fontSize: '0.9rem' }}>
+                                                    Ponente: <strong style={{ color: '#cbd5e1' }}>{sessionObj.speaker}</strong>
+                                                </p>
+                                            </div>
+                                            <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '0.4rem 0.8rem', borderRadius: '6px', textAlign: 'right' }}>
+                                                <span style={{ display: 'block', color: '#60a5fa', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                                    📅 {sessionObj.session_date || 'Sin fecha'}
+                                                </span>
+                                                <span style={{ display: 'block', color: '#cbd5e1', fontSize: '0.8rem' }}>
+                                                    ⏰ {sessionObj.start_time} - {sessionObj.end_time}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Tabla independiente para esta Charla */}
+                                        <div className="table-wrapper" style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
+                                            <table className="attendee-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Nombre Completo</th>
+                                                        <th>Contacto</th>
+                                                        <th>Llegada</th>
+                                                        <th>Pago</th>
+                                                        <th className="action-col">QR/Acciones</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {currentSessionAttendees.length === 0 ? (
+                                                        <tr>
+                                                            <td colSpan="5" className="empty-state" style={{ padding: '1.5rem', color: '#64748b' }}>
+                                                                No hay asistentes registrados para esta charla en la búsqueda actual.
+                                                            </td>
+                                                        </tr>
+                                                    ) : (
+                                                        currentSessionAttendees.map(att => (
+                                                            <tr key={att.id} style={{ background: selectedPrintAttendees.find(a => a.id === att.id) ? 'rgba(139, 92, 246, 0.1)' : '' }}>
+                                                                <td>
+                                                                    <div className="user-cell">
+                                                                        <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
+                                                                        <div className="user-name">
+                                                                            <span className="first-name">{att.first_name} {att.last_name}</span>
+                                                                            {(att.company && att.company !== 'No Aplica') && (
+                                                                                <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{att.company}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    <div className="contact-cell">
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}><Mail size={14} className="cell-icon" /> {att.email || 'N/A'}</div>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#94a3b8' }}><MessageCircle size={14} className="cell-icon" /> {att.phone || 'N/A'}</div>
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    {att.has_arrived ? (
+                                                                        <div className="time-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                                                                            <Clock size={14} />
+                                                                            {att.arrival_time}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="time-badge">-- : --</div>
+                                                                    )}
+                                                                </td>
+                                                                <td>
+                                                                    <div className={`payment-badge payment-${att.payment_method?.toLowerCase() || 'efectivo'}`}>
+                                                                        <CreditCard size={14} />
+                                                                        {att.payment_method}
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    <div className="action-buttons">
+                                                                        {!att.has_arrived && (
+                                                                            <button className="edit-btn" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }} onClick={() => handleCheckIn(att.id)} title="Marcar Llegada Manual">
+                                                                                <Clock size={16} />
+                                                                            </button>
+                                                                        )}
+                                                                        <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)} title="Enviar por WhatsApp">
+                                                                            <MessageCircle size={16} />
+                                                                        </button>
+                                                                        <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', opacity: sendingEmailId === att.id ? 0.5 : 1 }} onClick={() => handleSendEmail(att)} disabled={sendingEmailId === att.id} title="Enviar por Correo (Adjuntará QR)">
+                                                                            <Send size={16} />
+                                                                        </button>
+                                                                        <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
+                                                                            <QrCode size={16} />
+                                                                        </button>
+                                                                        <button className="delete-btn" onClick={() => handleDelete(att.id)} title="Eliminar">
+                                                                            <Trash2 size={16} />
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {/* 👉 CASO EXTRA: ASISTENTES SIN CHARLA ASIGNADA (Por si existen datos previos o mal guardados) */}
+                            {attendeesBySession['unassigned'] && attendeesBySession['unassigned'].length > 0 && (
+                                <div className="session-group-section unassigned-section">
+                                    <div className="session-header-bar" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderBottom: 'none', padding: '0.8rem 1.5rem', borderTopLeftRadius: '12px', borderTopRightRadius: '12px' }}>
+                                        <h3 style={{ margin: 0, color: '#ef4444', fontSize: '1.1rem', fontWeight: 'bold' }}>
+                                            ⚠️ Asistentes Generales / Sin Charla Asignada
+                                        </h3>
+                                    </div>
+                                    <div className="table-wrapper" style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                        <table className="attendee-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Nombre Completo</th>
+                                                    <th>Contacto</th>
+                                                    <th>Llegada</th>
+                                                    <th>Pago</th>
+                                                    <th className="action-col">QR/Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {attendeesBySession['unassigned'].map(att => (
+                                                    <tr key={att.id}>
+                                                        <td>
+                                                            <div className="user-cell">
+                                                                <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
+                                                                <div className="user-name">
+                                                                    <span className="first-name">{att.first_name} {att.last_name}</span>
+                                                                    {(att.company && att.company !== 'No Aplica') && <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{att.company}</span>}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div className="contact-cell">
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}><Mail size={14} className="cell-icon" /> {att.email || 'N/A'}</div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#94a3b8' }}><MessageCircle size={14} className="cell-icon" /> {att.phone || 'N/A'}</div>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            {att.has_arrived ? (
+                                                                <div className="time-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}><Clock size={14} /> {att.arrival_time}</div>
+                                                            ) : <div className="time-badge">-- : --</div>}
+                                                        </td>
+                                                        <td>
+                                                            <div className={`payment-badge payment-${att.payment_method?.toLowerCase() || 'efectivo'}`}><CreditCard size={14} /> {att.payment_method}</div>
+                                                        </td>
+                                                        <td>
+                                                            <div className="action-buttons">
+                                                                {!att.has_arrived && <button className="edit-btn" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }} onClick={() => handleCheckIn(att.id)}><Clock size={16} /></button>}
+                                                                <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)}><MessageCircle size={16} /></button>
+                                                                <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8' }} onClick={() => handleSendEmail(att)}><Send size={16} /></button>
+                                                                <button className="edit-btn" onClick={() => setShowingQR(att)}><QrCode size={16} /></button>
+                                                                <button className="delete-btn" onClick={() => handleDelete(att.id)}><Trash2 size={16} /></button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             )}
-                        </tbody>
-                    </table>
+                        </>
+                    )}
+
                 </div>
             )}
 
@@ -483,10 +620,29 @@ const AttendeeList = () => {
                                     <input type="text" name="last_name" value={formData.last_name} onChange={handleInputChange} required />
                                 </div>
                             </div>
+
+                            <div className="form-group">
+                                <label>C.I. (Opcional)</label>
+                                <input type="text" name="ci" value={formData.ci || ''} onChange={handleInputChange} placeholder="Ej. 12.345.678" />
+                            </div>
+
                             <div className="form-group">
                                 <label>Correo Electrónico</label>
                                 <input type="email" name="email" value={formData.email} onChange={handleInputChange} required />
                             </div>
+
+                            <div className="form-group">
+                                <label>Charla / Curso al que se inscribe</label>
+                                <select name="session_id" value={formData.session_id || ''} onChange={handleInputChange} required>
+                                    <option value="" disabled>Selecciona una charla...</option>
+                                    {sessions.map((s) => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.session_date ? `${s.session_date} | ` : ''} {s.start_time} - {s.name} ({s.speaker})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
                             <div className="form-group">
                                 <label>Teléfono / WhatsApp</label>
                                 <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="Ej. +584141234567" />
@@ -530,38 +686,31 @@ const AttendeeList = () => {
                 </div>
             )}
 
-            {/* QR Scanner Display Modal */}
             {showingQR && (
                 <div className="modal-overlay" onClick={() => setShowingQR(null)}>
                     <div className="modal-content glass-panel" style={{ textAlign: 'center', padding: '3rem', maxWidth: '400px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
                         <h2 style={{ color: 'white', marginBottom: '1.5rem', fontWeight: 'bold' }}>Pase de Acceso Único</h2>
 
                         <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', display: 'inline-block', marginBottom: '1.5rem', border: '4px solid #3b82f6' }}>
-                            <QRCodeSVG
-                                value={`${window.location.origin}/show/${showingQR.qr_code}`}
-                                size={200}
-                                level={"Q"}
-                            />
+                            <QRCodeSVG value={`${window.location.origin}/show/${showingQR.qr_code}`} size={200} level={"Q"} />
                         </div>
 
                         <h3 style={{ color: '#cbd5e1', fontSize: '1.2rem', marginBottom: '0.5rem' }}>{showingQR.first_name} {showingQR.last_name}</h3>
                         <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem' }}>Salón: {roomInfo?.name}</p>
 
-                        <button
-                            style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.8rem 2rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%' }}
-                            onClick={() => setShowingQR(null)}
-                        >
+                        <button style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.8rem 2rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%' }} onClick={() => setShowingQR(null)}>
                             Cerrar
                         </button>
                     </div>
                 </div>
             )}
+
             {showSlotModal && (
                 <div className="modal-overlay" onClick={() => setShowSlotModal(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', background: '#1e293b', borderRadius: '16px', padding: '2rem' }}>
                         <h2 className="gradient-text" style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Seleccionar Posición</h2>
                         <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                            Como elegiste solo un asistente, indica en cuál de los 10 espacios de la hoja adhesiva quieres imprimir su gafete. Esto te permite ahorrar hojas que ya están parcialmente usadas.
+                            Como elegiste solo un asistente, indica en cuál de los 10 espacios de la hoja adhesiva quieres imprimir su gafete.
                         </p>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             {Array(10).fill(null).map((_, idx) => (
@@ -572,16 +721,7 @@ const AttendeeList = () => {
                                         setShowSlotModal(false);
                                         setIsPrinting(true);
                                     }}
-                                    style={{
-                                        border: '1px dashed rgba(255,255,255,0.2)',
-                                        padding: '1.5rem',
-                                        textAlign: 'center',
-                                        cursor: 'pointer',
-                                        borderRadius: '8px',
-                                        background: 'rgba(0,0,0,0.2)',
-                                        color: '#cbd5e1',
-                                        transition: 'all 0.2s'
-                                    }}
+                                    style={{ border: '1px dashed rgba(255,255,255,0.2)', padding: '1.5rem', textAlign: 'center', cursor: 'pointer', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: '#cbd5e1', transition: 'all 0.2s' }}
                                     onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)'; e.currentTarget.style.borderColor = '#8b5cf6'; }}
                                     onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
                                 >
@@ -589,11 +729,7 @@ const AttendeeList = () => {
                                 </div>
                             ))}
                         </div>
-                        <button
-                            className="btn-cancel"
-                            style={{ width: '100%', marginTop: '1.5rem' }}
-                            onClick={() => setShowSlotModal(false)}
-                        >
+                        <button className="btn-cancel" style={{ width: '100%', marginTop: '1.5rem' }} onClick={() => setShowSlotModal(false)}>
                             Cancelar
                         </button>
                     </div>
@@ -608,7 +744,6 @@ const AttendeeList = () => {
                         startingSlot={printStartingSlot}
                         onFinish={() => {
                             setIsPrinting(false);
-                            // Opcionalmente mantener la selección, pero la limpiaremos para conveniencia:
                             setSelectedPrintAttendees([]);
                         }}
                     />
