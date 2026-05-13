@@ -28,15 +28,16 @@ const Dashboard = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
     const [rooms, setRooms] = useState([]);
-    const [sessions, setSessions] = useState([]); // 👉 ALMACENA TODAS LAS CHARLAS DEL EVENTO
+    const [sessions, setSessions] = useState([]);
     const [eventData, setEventData] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showQRModal, setShowQRModal] = useState(false);
     const [showAccessCode, setShowAccessCode] = useState(false);
     const [newRoomData, setNewRoomData] = useState({ name: '', conference: '', expected_capacity: '' });
 
+    // Modales de control de ingreso y escáner
     const [qrPrefill, setQrPrefill] = useState(null);
-    const [scannedUserData, setScannedUserData] = useState(null); // 👉 CONTROLA LA MODAL DE ITINERARIO (DOBLE CLIC)
+    const [scannedUserData, setScannedUserData] = useState(null);
 
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -49,7 +50,6 @@ const Dashboard = () => {
                 setEventData(eventRes.data.event);
             }
 
-            // Descargamos salas, sesiones y asistentes
             const roomsRes = await axios.get(`${API_URL}/events/${eventId}/rooms`);
             const attendeesRes = await axios.get(`${API_URL}/events/${eventId}/attendees?t=${Date.now()}`);
 
@@ -144,12 +144,9 @@ const Dashboard = () => {
                 const hashMatch = decodedText.match(/\/show\/([a-zA-Z0-9]+)/);
                 if (hashMatch && hashMatch[1]) {
                     const qrHash = hashMatch[1];
-
-                    // Consultamos el nuevo endpoint del backend
                     const lookupRes = await axios.get(`${API_URL}/events/${eventId}/scan-lookup/${qrHash}`);
 
                     if (lookupRes.data.success) {
-                        // Abrimos la modal con la lista de charlas de este usuario
                         setScannedUserData(lookupRes.data);
                         return;
                     }
@@ -207,14 +204,15 @@ const Dashboard = () => {
             }
         }
 
-        // Pre-llenamos el formulario externo asegurando la propiedad session_id
+        // 👉 Inicializamos pre-llenado incorporando la propiedad position
         setQrPrefill({
             first_name: firstName,
             last_name: lastName,
             email: '',
+            position: '', // Inicializamos el campo Cargo vacío
             payment_method: 'Efectivo',
             room_id: roomId,
-            session_id: '' // Inicializamos vacío para forzar su selección
+            session_id: ''
         });
     };
 
@@ -230,11 +228,9 @@ const Dashboard = () => {
                 return;
             }
 
-            // Creamos al asistente
             const res = await axios.post(`${API_URL}/events/${eventId}/attendees`, qrPrefill);
             if (res.data.success) {
                 const newId = res.data.attendee.id;
-                // Marcamos su llegada automáticamente a esa fila individual
                 await axios.put(`${API_URL}/events/${eventId}/attendees/${newId}/arrival`);
 
                 setQrPrefill(null);
@@ -404,7 +400,7 @@ const Dashboard = () => {
             )}
 
             {/* ==================================================================== */}
-            {/* 🎯 FORMULARIO DE INGRESO MANUAL / QR EXTERNO CON SELECT DE CHARLA   */}
+            {/* 🎯 FORMULARIO DE INGRESO MANUAL / QR EXTERNO CON CAMPO CARGO        */}
             {/* ==================================================================== */}
             {qrPrefill && (
                 <div className="modal-overlay" onClick={() => setQrPrefill(null)}>
@@ -425,6 +421,18 @@ const Dashboard = () => {
                                 </div>
                             </div>
 
+                            {/* 👉 NUEVO CAMPO: Cargo del asistente */}
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Cargo (Opcional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="nombre del cargo"
+                                    value={qrPrefill.position || ''}
+                                    onChange={e => setQrPrefill({ ...qrPrefill, position: e.target.value })}
+                                    style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                />
+                            </div>
+
                             {/* Selección de Sala */}
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Sala Destino</label>
@@ -439,7 +447,7 @@ const Dashboard = () => {
                                 </select>
                             </div>
 
-                            {/* 👉 NUEVO: Selección Dinámica de Charla */}
+                            {/* Selección Dinámica de Charla */}
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Charla / Horario de Ingreso</label>
                                 <select
@@ -461,9 +469,10 @@ const Dashboard = () => {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Correo Electrónico (Opcional)</label>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Correo Electrónico</label>
                                 <input type="email" value={qrPrefill.email} onChange={e => setQrPrefill({ ...qrPrefill, email: e.target.value })} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
                             </div>
+
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Método de Pago</label>
                                 <select value={qrPrefill.payment_method} onChange={e => setQrPrefill({ ...qrPrefill, payment_method: e.target.value })} style={{ padding: '0.75rem', borderRadius: '8px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
@@ -473,6 +482,7 @@ const Dashboard = () => {
                                     <option value="Beca">Beca</option>
                                 </select>
                             </div>
+
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
                                 <button type="button" onClick={() => setQrPrefill(null)} style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
                                 <button type="submit" style={{ padding: '0.75rem 1.5rem', background: '#3b82f6', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Guardar e Ingresar</button>
@@ -483,7 +493,7 @@ const Dashboard = () => {
             )}
 
             {/* ==================================================================== */}
-            {/* 🎯 PANEL DE CONTROL EN PUERTA: ITINERARIO ESCANEADO (DOBLE CLIC)    */}
+            {/* 🎯 PANEL DE CONTROL EN PUERTA: INCLUYE EMPRESA Y CARGO ESCANEADO    */}
             {/* ==================================================================== */}
             {scannedUserData && (
                 <div className="modal-overlay" onClick={() => setScannedUserData(null)}>
@@ -499,6 +509,18 @@ const Dashboard = () => {
                             <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>
                                 C.I: {scannedUserData.user.ci || 'N/A'} | Correo: {scannedUserData.user.email}
                             </p>
+
+                            {/* 👉 NUEVO: Renderizamos la empresa y el cargo verificados en puerta */}
+                            {(scannedUserData.user.company && scannedUserData.user.company !== 'No Aplica') && (
+                                <p style={{ color: '#cbd5e1', fontSize: '0.85rem', margin: '0.3rem 0 0 0' }}>
+                                    🏢 <strong>Empresa:</strong> {scannedUserData.user.company}
+                                </p>
+                            )}
+                            {scannedUserData.user.position && (
+                                <p style={{ color: '#cbd5e1', fontSize: '0.85rem', margin: '0.2rem 0 0 0', fontStyle: 'italic' }}>
+                                    💼 <strong>Cargo:</strong> {scannedUserData.user.position}
+                                </p>
+                            )}
                         </div>
 
                         <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
@@ -518,7 +540,6 @@ const Dashboard = () => {
                                     onDoubleClick={async () => {
                                         if (!session.has_arrived) {
                                             try {
-                                                // Marcamos la llegada exclusivamente a este ID de fila
                                                 const res = await axios.put(`${API_URL}/events/${eventId}/attendees/${session.attendee_row_id}/arrival`);
                                                 if (res.data.success) {
                                                     const updatedSessions = scannedUserData.sessions.map(s =>

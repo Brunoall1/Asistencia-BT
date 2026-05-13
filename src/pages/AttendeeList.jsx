@@ -27,7 +27,7 @@ const AttendeeList = () => {
 
     const hiddenFileInput = useRef(null);
 
-    // Modal / Form state
+    // Modal / Form state actualizados para soportar Cargo (position) y múltiples charlas
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({
@@ -35,9 +35,10 @@ const AttendeeList = () => {
         last_name: '',
         ci: '',
         email: '',
-        session_id: '',
+        selected_sessions: [],
         phone: '',
         company: 'No Aplica',
+        position: '', // 👉 Inicializamos el campo Cargo
         payment_method: 'Efectivo',
         room_id: roomId || ''
     });
@@ -101,14 +102,14 @@ const AttendeeList = () => {
         const filtered = attendees.filter(att =>
             att.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             att.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (att.email && att.email.toLowerCase().includes(searchTerm.toLowerCase()))
+            (att.email && att.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (att.position && att.position.toLowerCase().includes(searchTerm.toLowerCase()))
         );
         setFilteredAttendees(filtered);
     }, [searchTerm, attendees]);
 
     const handleExportExcel = () => {
         const dataToExport = filteredAttendees.map(att => {
-            // Buscamos el nombre de la charla asignada para colocarlo en el Excel
             const sessionObj = sessions.find(s => String(s.id) === String(att.session_id));
             return {
                 'Nombre': att.first_name,
@@ -116,6 +117,7 @@ const AttendeeList = () => {
                 'Correo': att.email || 'N/A',
                 'WhatsApp': att.phone || 'N/A',
                 'Empresa': att.company || 'No Aplica',
+                'Cargo': att.position || 'N/A', // 👉 Inyectamos el Cargo en la exportación Excel
                 'Charla Asignada': sessionObj ? `${sessionObj.name} (${sessionObj.speaker})` : 'General / Sin Asignar',
                 'Método Pago': att.payment_method || 'Efectivo',
                 'Hora Llegada': att.has_arrived ? att.arrival_time : 'Aún no llega',
@@ -147,12 +149,14 @@ const AttendeeList = () => {
                 const ws = wb.Sheets[wsname];
                 const data = XLSX.utils.sheet_to_json(ws);
 
+                // 👉 Mapeamos también la columna Cargo si viene en el Excel
                 const mappedAttendees = data.map(row => ({
                     first_name: row['Nombre'] || row['Nombres'] || row['First Name'] || '',
                     last_name: row['Apellido'] || row['Apellidos'] || row['Last Name'] || '',
                     email: row['Correo'] || row['Email'] || '',
                     phone: row['Teléfono'] || row['WhatsApp'] || row['Telefono'] || row['Phone'] || '',
                     company: row['Empresa'] || row['Compañia'] || row['Company'] || 'No Aplica',
+                    position: row['Cargo'] || row['Posición'] || row['Posicion'] || row['Position'] || '',
                     payment_method: row['Pago'] || row['Método Pago'] || 'Efectivo'
                 })).filter(att => att.first_name || att.last_name);
 
@@ -181,7 +185,11 @@ const AttendeeList = () => {
     const openModal = (attendee = null) => {
         if (attendee) {
             setEditingId(attendee.id);
-            setFormData(attendee);
+            setFormData({
+                ...attendee,
+                position: attendee.position || '', // Aseguramos que cargue el cargo al editar
+                selected_sessions: attendee.session_id ? [String(attendee.session_id)] : []
+            });
         } else {
             setEditingId(null);
             setFormData({
@@ -189,9 +197,10 @@ const AttendeeList = () => {
                 last_name: '',
                 ci: '',
                 email: '',
-                session_id: '',
+                selected_sessions: [],
                 phone: '',
                 company: 'No Aplica',
+                position: '', // Reiniciamos el cargo
                 payment_method: 'Efectivo',
                 room_id: roomId
             });
@@ -209,23 +218,52 @@ const AttendeeList = () => {
         setFormData({ ...formData, [name]: value });
     };
 
+    const handleCheckboxChange = (sessionId) => {
+        const strId = String(sessionId);
+        if (formData.selected_sessions.includes(strId)) {
+            setFormData({
+                ...formData,
+                selected_sessions: formData.selected_sessions.filter(id => id !== strId)
+            });
+        } else {
+            setFormData({
+                ...formData,
+                selected_sessions: [...formData.selected_sessions, strId]
+            });
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (formData.selected_sessions.length === 0) {
+            alert('Por favor, selecciona al menos una charla para inscribir al participante.');
+            return;
+        }
+
         try {
             if (editingId) {
-                const res = await axios.put(`${API_URL}/events/${eventId}/attendees/${editingId}`, formData);
+                const payloadObj = {
+                    ...formData,
+                    session_id: formData.selected_sessions[0]
+                };
+                const res = await axios.put(`${API_URL}/events/${eventId}/attendees/${editingId}`, payloadObj);
                 if (res.data.success) {
                     fetchAttendees();
                 }
             } else {
-                const res = await axios.post(`${API_URL}/events/${eventId}/attendees`, formData);
-                if (res.data.success) {
-                    fetchAttendees();
+                for (const sessionId of formData.selected_sessions) {
+                    const payloadObj = {
+                        ...formData,
+                        session_id: sessionId
+                    };
+                    await axios.post(`${API_URL}/events/${eventId}/attendees`, payloadObj);
                 }
+                fetchAttendees();
             }
         } catch (err) {
             console.error('Error saving attendee:', err);
-            alert('Error guardando los datos del asistente');
+            alert('Ocurrió un error guardando los datos del asistente. Verifica si existe un choque de horarios en la selección.');
         }
         closeModal();
     };
@@ -242,9 +280,17 @@ const AttendeeList = () => {
         }
     };
 
-    const handleDelete = (id) => {
-        if (window.confirm('La eliminación requiere una ruta DELETE en backend. ¿Omitir por ahora?')) {
-            setAttendees(attendees.filter(att => att.id !== id));
+    const handleDelete = async (id) => {
+        if (window.confirm('¿Estás seguro de que deseas eliminar a este participante de forma permanente?')) {
+            try {
+                const res = await axios.delete(`${API_URL}/events/${eventId}/attendees/${id}`);
+                if (res.data.success) {
+                    setAttendees(attendees.filter(att => att.id !== id));
+                }
+            } catch (err) {
+                console.error('Error al eliminar participante:', err);
+                alert('Hubo un error al intentar eliminar al participante de la base de datos.');
+            }
         }
     };
 
@@ -261,17 +307,14 @@ const AttendeeList = () => {
         let itineraryText = '';
 
         try {
-            // 1. Consultamos el itinerario completo usando el endpoint público que ya actualizamos
             const res = await axios.get(`${API_URL}/public/attendee/${att.qr_code}`);
             if (res.data.success && res.data.sessions) {
-                // Armamos la lista usando formato nativo de WhatsApp (*negrita*)
                 itineraryText = res.data.sessions.map(s =>
                     `📌 *${s.session_name}*%0A📍 Salón: ${s.room_name}%0A📅 ${s.session_date || ''} ⏰ ${s.start_time} - ${s.end_time}`
                 ).join('%0A%0A');
             }
         } catch (err) {
             console.error('Error descargando itinerario para WA:', err);
-            // Fallback de seguridad por si falla la red
             itineraryText = `📌 *Charla en ${roomInfo?.name || 'Salón'}*`;
         }
 
@@ -281,11 +324,10 @@ const AttendeeList = () => {
             let userMsg = eventInfo.custom_message
                 .replace(/{nombre}/g, `${att.first_name} ${att.last_name}`)
                 .replace(/{sala}/g, roomInfo?.name || '')
-                .replace(/{charlas}/g, itineraryText) // 👉 Soporte para la nueva etiqueta
+                .replace(/{charlas}/g, itineraryText)
                 .replace(/{qr}/g, qrUrl)
                 .replace(/\n/g, '%0A');
 
-            // Si el administrador no puso la etiqueta {charlas} en el texto, se la anexamos al final
             if (!eventInfo.custom_message.includes('{charlas}')) {
                 userMsg += `%0A%0A*Tu Itinerario Confirmado:*%0A${itineraryText}`;
             }
@@ -338,9 +380,8 @@ const AttendeeList = () => {
         }
     };
 
-    // --- 🎯 AGRUPACIÓN DE ASISTENTES POR CHARLA ---
     const attendeesBySession = filteredAttendees.reduce((acc, att) => {
-        const key = att.session_id || 'unassigned';
+        const key = att.session_id ? String(att.session_id) : 'unassigned';
         if (!acc[key]) acc[key] = [];
         acc[key].push(att);
         return acc;
@@ -394,7 +435,7 @@ const AttendeeList = () => {
                     <Search size={18} className="search-icon" />
                     <input
                         type="text"
-                        placeholder="Buscar por nombre, apellido o correo..."
+                        placeholder="Buscar por nombre, apellido, correo o cargo..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -409,7 +450,6 @@ const AttendeeList = () => {
             ) : (
                 <div className="sessions-tables-container" style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
 
-                    {/* Si no hay charlas registradas ni asistentes, mostramos un estado vacío global */}
                     {sessions.length === 0 && filteredAttendees.length === 0 ? (
                         <div className="table-wrapper">
                             <table className="attendee-table">
@@ -422,14 +462,11 @@ const AttendeeList = () => {
                         </div>
                     ) : (
                         <>
-                            {/* 👉 ITERAMOS POR CADA CHARLA DISPONIBLE EN LA SALA */}
                             {sessions.map((sessionObj) => {
-                                const currentSessionAttendees = attendeesBySession[sessionObj.id] || [];
+                                const currentSessionAttendees = attendeesBySession[String(sessionObj.id)] || [];
 
                                 return (
                                     <div key={sessionObj.id} className="session-group-section">
-
-                                        {/* Encabezado elegante de la Charla */}
                                         <div className="session-header-bar" style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid #334155', borderBottom: 'none', padding: '1rem 1.5rem', borderTopLeftRadius: '12px', borderTopRightRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                                             <div>
                                                 <h3 style={{ margin: 0, color: 'white', fontSize: '1.2rem', fontWeight: 'bold' }}>
@@ -449,7 +486,6 @@ const AttendeeList = () => {
                                             </div>
                                         </div>
 
-                                        {/* Tabla independiente para esta Charla */}
                                         <div className="table-wrapper" style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
                                             <table className="attendee-table">
                                                 <thead>
@@ -476,8 +512,16 @@ const AttendeeList = () => {
                                                                         <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
                                                                         <div className="user-name">
                                                                             <span className="first-name">{att.first_name} {att.last_name}</span>
+                                                                            {/* 👉 RENDERIZAMOS EMPRESA Y CARGO SI EXISTEN */}
                                                                             {(att.company && att.company !== 'No Aplica') && (
-                                                                                <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{att.company}</span>
+                                                                                <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem', display: 'block' }}>
+                                                                                    🏢 {att.company}
+                                                                                </span>
+                                                                            )}
+                                                                            {att.position && (
+                                                                                <span className="last-name" style={{ color: '#cbd5e1', fontSize: '0.8rem', display: 'block', fontStyle: 'italic' }}>
+                                                                                    💼 {att.position}
+                                                                                </span>
                                                                             )}
                                                                         </div>
                                                                     </div>
@@ -520,6 +564,10 @@ const AttendeeList = () => {
                                                                         <button className="edit-btn" onClick={() => setShowingQR(att)} title="Ver QR de acceso">
                                                                             <QrCode size={16} />
                                                                         </button>
+                                                                        {/* Botón de edición que abre el modal pre-cargado */}
+                                                                        <button className="edit-btn" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }} onClick={() => openModal(att)} title="Editar Asistente">
+                                                                            <Pencil size={16} />
+                                                                        </button>
                                                                         <button className="delete-btn" onClick={() => handleDelete(att.id)} title="Eliminar">
                                                                             <Trash2 size={16} />
                                                                         </button>
@@ -535,7 +583,6 @@ const AttendeeList = () => {
                                 );
                             })}
 
-                            {/* 👉 CASO EXTRA: ASISTENTES SIN CHARLA ASIGNADA (Por si existen datos previos o mal guardados) */}
                             {attendeesBySession['unassigned'] && attendeesBySession['unassigned'].length > 0 && (
                                 <div className="session-group-section unassigned-section">
                                     <div className="session-header-bar" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderBottom: 'none', padding: '0.8rem 1.5rem', borderTopLeftRadius: '12px', borderTopRightRadius: '12px' }}>
@@ -562,7 +609,8 @@ const AttendeeList = () => {
                                                                 <div className="avatar">{att.first_name.charAt(0)}{att.last_name.charAt(0)}</div>
                                                                 <div className="user-name">
                                                                     <span className="first-name">{att.first_name} {att.last_name}</span>
-                                                                    {(att.company && att.company !== 'No Aplica') && <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{att.company}</span>}
+                                                                    {(att.company && att.company !== 'No Aplica') && <span className="last-name" style={{ color: '#94a3b8', fontSize: '0.85rem', display: 'block' }}>🏢 {att.company}</span>}
+                                                                    {att.position && <span className="last-name" style={{ color: '#cbd5e1', fontSize: '0.8rem', display: 'block', fontStyle: 'italic' }}>💼 {att.position}</span>}
                                                                 </div>
                                                             </div>
                                                         </td>
@@ -586,6 +634,7 @@ const AttendeeList = () => {
                                                                 <button className="edit-btn" style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }} onClick={() => handleSendWA(att)}><MessageCircle size={16} /></button>
                                                                 <button className="edit-btn" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8' }} onClick={() => handleSendEmail(att)}><Send size={16} /></button>
                                                                 <button className="edit-btn" onClick={() => setShowingQR(att)}><QrCode size={16} /></button>
+                                                                <button className="edit-btn" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }} onClick={() => openModal(att)}><Pencil size={16} /></button>
                                                                 <button className="delete-btn" onClick={() => handleDelete(att.id)}><Trash2 size={16} /></button>
                                                             </div>
                                                         </td>
@@ -602,6 +651,9 @@ const AttendeeList = () => {
                 </div>
             )}
 
+            {/* ==================================================================== */}
+            {/* 🎯 MODAL DE CREACIÓN / EDICIÓN CON SOPORTE DE CARGO Y CHECKBOXES     */}
+            {/* ==================================================================== */}
             {isModalOpen && (
                 <div className="modal-overlay" onClick={closeModal}>
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -622,7 +674,7 @@ const AttendeeList = () => {
                             </div>
 
                             <div className="form-group">
-                                <label>C.I. (Opcional)</label>
+                                <label>C.I.</label>
                                 <input type="text" name="ci" value={formData.ci || ''} onChange={handleInputChange} placeholder="Ej. 12.345.678" />
                             </div>
 
@@ -632,21 +684,60 @@ const AttendeeList = () => {
                             </div>
 
                             <div className="form-group">
-                                <label>Charla / Curso al que se inscribe</label>
-                                <select name="session_id" value={formData.session_id || ''} onChange={handleInputChange} required>
-                                    <option value="" disabled>Selecciona una charla...</option>
-                                    {sessions.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                            {s.session_date ? `${s.session_date} | ` : ''} {s.start_time} - {s.name} ({s.speaker})
-                                        </option>
-                                    ))}
-                                </select>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#cbd5e1' }}>
+                                    Charlas / Horarios a inscribir:
+                                </label>
+                                <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.5rem',
+                                    maxHeight: '160px',
+                                    overflowY: 'auto',
+                                    background: '#0f172a',
+                                    padding: '0.8rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid #334155'
+                                }}>
+                                    {sessions.length === 0 ? (
+                                        <span style={{ color: '#64748b', fontSize: '0.85rem' }}>No hay charlas configuradas en esta sala.</span>
+                                    ) : (
+                                        sessions.map((s) => {
+                                            const isChecked = formData.selected_sessions.includes(String(s.id));
+                                            return (
+                                                <label
+                                                    key={s.id}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.6rem',
+                                                        cursor: 'pointer',
+                                                        color: isChecked ? '#fff' : '#94a3b8',
+                                                        fontSize: '0.9rem',
+                                                        userSelect: 'none'
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={() => handleCheckboxChange(s.id)}
+                                                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#3b82f6' }}
+                                                    />
+                                                    <span>
+                                                        {s.session_date ? `${s.session_date} | ` : ''}
+                                                        <strong>{s.start_time}</strong> - {s.name} ({s.speaker})
+                                                    </span>
+                                                </label>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
 
                             <div className="form-group">
                                 <label>Teléfono / WhatsApp</label>
                                 <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="Ej. +584141234567" />
                             </div>
+
                             <div className="form-group">
                                 <label>Empresa (Opcional)</label>
                                 <input
@@ -666,6 +757,19 @@ const AttendeeList = () => {
                                     ))}
                                 </datalist>
                             </div>
+
+                            {/* 👉 NUEVO CAMPO: CARGO */}
+                            <div className="form-group">
+                                <label>Cargo (Opcional)</label>
+                                <input
+                                    type="text"
+                                    name="position"
+                                    value={formData.position || ''}
+                                    onChange={handleInputChange}
+                                    placeholder="nombre del cargo"
+                                />
+                            </div>
+
                             <div className="form-group">
                                 <label>Método de Pago</label>
                                 <select name="payment_method" value={formData.payment_method} onChange={handleInputChange}>

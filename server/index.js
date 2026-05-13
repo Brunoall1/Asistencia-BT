@@ -39,16 +39,25 @@ app.post('/api/utils/scrape', async (req, res) => {
     }
 });
 
-// Ruta temporal para quitar el candado UNIQUE de producción
+// Ruta temporal para actualizar la tabla sessions en producción
 app.get('/api/utils/fix-db', async (req, res) => {
     try {
-        await db.run(`ALTER TABLE attendees DROP CONSTRAINT IF EXISTS attendees_qr_code_key`);
-        res.json({ success: true, message: 'Candado UNIQUE eliminado de producción exitosamente.' });
+        await db.run(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS session_date VARCHAR(255)`);
+        res.json({ success: true, message: 'Columna session_date agregada exitosamente a producción.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
+// Ruta temporal para inyectar el campo 'position' (Cargo) en producción
+app.get('/api/utils/fix-db-position', async (req, res) => {
+    try {
+        await db.run(`ALTER TABLE attendees ADD COLUMN IF NOT EXISTS position VARCHAR(255) DEFAULT ''`);
+        res.json({ success: true, message: 'Columna position (Cargo) agregada exitosamente a la base de datos.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ==========================================
 // SYSTEM CONFIG / AUTH ROUTES
@@ -221,9 +230,9 @@ app.get('/api/events/:eventId/companies', async (req, res) => {
     }
 });
 
-// Create an attendee
+// Create an attendee (Ajustado para inyectar position)
 app.post('/api/events/:eventId/attendees', async (req, res) => {
-    const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
+    const { room_id, first_name, last_name, email, phone, company, position, payment_method, session_id } = req.body;
     const event_id = req.params.eventId;
 
     try {
@@ -237,7 +246,7 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
             const existingSessions = await db.all(
                 `SELECT s.session_date, s.start_time, s.end_time, s.name as session_name, r.name as room_name
                  FROM attendees a
-                 JOIN sessions s ON a.room_id = s.room_id
+                 JOIN sessions s ON a.session_id = s.id
                  JOIN rooms r ON a.room_id = r.id
                  WHERE a.email = ? AND a.event_id = ?`,
                 [email, event_id]
@@ -258,10 +267,10 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
         }
 
         // RESTRICCIÓN 2: Evitar registro duplicado en la misma charla (por nombre)
-        if (email && req.body.session_id) {
+        if (email && session_id) {
             const targetSession = await db.get(
                 `SELECT name FROM sessions WHERE id = ?`,
-                [req.body.session_id]
+                [session_id]
             );
 
             if (targetSession) {
@@ -287,19 +296,16 @@ app.post('/api/events/:eventId/attendees', async (req, res) => {
         const qr_code = crypto.createHash('md5').update(id + event_id + Date.now().toString()).digest('hex');
 
         await db.run(
-            `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
-            [id, event_id, room_id, first_name, last_name, email, phone || '', company || 'No Aplica', payment_method, qr_code]
+            `INSERT INTO attendees (id, event_id, room_id, session_id, first_name, last_name, email, phone, company, position, payment_method, qr_code, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
+            [id, event_id, room_id, session_id || null, first_name, last_name, email, phone || '', company || 'No Aplica', position || '', payment_method, qr_code]
         );
-        res.json({ success: true, attendee: { id, event_id, room_id, first_name, last_name, email, phone, payment_method, qr_code, status: 'accepted' } });
+        res.json({ success: true, attendee: { id, event_id, room_id, session_id, first_name, last_name, email, phone, position, payment_method, qr_code, status: 'accepted' } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// ====================================================================
-// 🎯 CORRECCIÓN CLAVE 1: RUTA BULK-STATUS REUBICADA ARRIBA DEL COMODÍN
-// ====================================================================
 // Bulk update attendees status
 app.put('/api/events/:eventId/attendees/bulk-status', async (req, res) => {
     const { status, attendeeIds } = req.body;
@@ -390,19 +396,16 @@ app.put('/api/events/:eventId/attendees/:attendeeId/arrival', async (req, res) =
     }
 });
 
-// ====================================================================
-// ⚠️ LA RUTA COMODÍN GENERAL SE QUEDA AQUÍ ABAJO
-// ====================================================================
-// Update an attendee (Edit info)
+// Update an attendee (Edit info - Ajustado para soportar position)
 app.put('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
-    const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
+    const { room_id, session_id, first_name, last_name, email, phone, company, position, payment_method } = req.body;
     const { eventId, attendeeId } = req.params;
 
     try {
         await db.run(
-            `UPDATE attendees SET room_id = ?, first_name = ?, last_name = ?, email = ?, phone = ?, company = ?, payment_method = ? 
+            `UPDATE attendees SET room_id = ?, session_id = ?, first_name = ?, last_name = ?, email = ?, phone = ?, company = ?, position = ?, payment_method = ? 
              WHERE id = ? AND event_id = ?`,
-            [room_id, first_name, last_name, email, phone || '', company || 'No Aplica', payment_method, attendeeId, eventId]
+            [room_id, session_id || null, first_name, last_name, email, phone || '', company || 'No Aplica', position || '', payment_method, attendeeId, eventId]
         );
         res.json({ success: true, message: 'Attendee updated successfully' });
     } catch (err) {
@@ -410,7 +413,23 @@ app.put('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
     }
 });
 
-// Bulk Create Attendees
+// Delete an attendee
+app.delete('/api/events/:eventId/attendees/:attendeeId', async (req, res) => {
+    const { eventId, attendeeId } = req.params;
+
+    try {
+        await db.run(
+            `DELETE FROM attendees WHERE id = ? AND event_id = ?`,
+            [attendeeId, eventId]
+        );
+
+        res.json({ success: true, message: 'Asistente eliminado correctamente de la base de datos.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Bulk Create Attendees (Ajustado para soportar position masivo)
 app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) => {
     const { attendees } = req.body;
     const { eventId, roomId } = req.params;
@@ -426,9 +445,9 @@ app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) =
             const qr_code = crypto.createHash('md5').update(id + eventId + Date.now().toString()).digest('hex');
 
             await db.run(
-                `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
-                [id, eventId, roomId, att.first_name || '', att.last_name || '', att.email || '', att.phone || '', att.company || 'No Aplica', att.payment_method || 'Efectivo', qr_code]
+                `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, position, payment_method, qr_code, status) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
+                [id, eventId, roomId, att.first_name || '', att.last_name || '', att.email || '', att.phone || '', att.company || 'No Aplica', att.position || '', att.payment_method || 'Efectivo', qr_code]
             );
             addedAttendees.push({ id, event_id: eventId, room_id: roomId, ...att, qr_code, status: 'accepted' });
         }
@@ -443,7 +462,6 @@ app.post('/api/events/:eventId/rooms/:roomId/attendees/bulk', async (req, res) =
 app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, res) => {
     const { eventId, attendeeId } = req.params;
     try {
-        // 1. Obtenemos la fila inicial para saber cuál es el QR y el correo de esta persona
         const baseAttendee = await db.get(`SELECT * FROM attendees WHERE id = ? AND event_id = ?`, [attendeeId, eventId]);
         const event = await db.get(`SELECT * FROM events WHERE id = ?`, [eventId]);
 
@@ -451,7 +469,6 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
             return res.status(400).json({ success: false, message: 'El asistente no tiene un correo válido registrado.' });
         }
 
-        // 2. MAGIA SQL: Buscamos TODAS las charlas inscritas por este usuario usando su QR
         const userSessions = await db.all(`
             SELECT s.name as session_name, s.speaker, s.session_date, s.start_time, s.end_time, r.name as room_name
             FROM attendees a
@@ -461,11 +478,9 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
             ORDER BY s.session_date ASC, s.start_time ASC
         `, [baseAttendee.qr_code, eventId]);
 
-        // 3. Generamos la imagen del código QR
         const qrUrl = req.headers.origin + '/show/' + baseAttendee.qr_code;
         const qrImageBase64 = await QRCode.toDataURL(qrUrl);
 
-        // 4. Construimos un bloque HTML con la lista de charlas ordenadas
         let sessionsHtmlList = `<div style="margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
             <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; text-align: left;">
                 <thead style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;">
@@ -500,7 +515,6 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
 
         sessionsHtmlList += `</tbody></table></div>`;
 
-        // 5. Configuración del transportador SMTP
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: parseInt(process.env.SMTP_PORT || '465'),
@@ -511,7 +525,6 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
             }
         });
 
-        // 6. Cuerpo HTML por defecto (Ahora incluye la tabla de charlas)
         let htmlBody = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; color: #333;">
                 <h2 style="color: #1e293b;">¡Hola ${baseAttendee.first_name} ${baseAttendee.last_name}!</h2>
@@ -527,16 +540,13 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
             </div>
         `;
 
-        // 7. Reemplazo para mensajes personalizados (Añadimos soporte para la etiqueta {charlas})
         if (event?.custom_message) {
-            // Nota: Si en tu panel administrativo usaban {sala}, lo dejamos por compatibilidad apuntando a la primera, 
-            // pero añadimos el reemplazo de {charlas} para que inyecte la tabla completa.
             const firstRoomObj = await db.get(`SELECT name FROM rooms WHERE id = ?`, [baseAttendee.room_id]);
 
             let parsedMessage = event.custom_message
                 .replace(/{nombre}/g, `${baseAttendee.first_name} ${baseAttendee.last_name}`)
                 .replace(/{sala}/g, firstRoomObj?.name || '')
-                .replace(/{charlas}/g, sessionsHtmlList) // 👉 NUEVA ETIQUETA SOPORTADA
+                .replace(/{charlas}/g, sessionsHtmlList)
                 .replace(/{qr}/g, `<a href="${qrUrl}" style="color: #3b82f6; font-weight: bold;">Abrir pase QR</a>`)
                 .replace(/\n/g, '<br/>');
 
@@ -588,9 +598,9 @@ app.post('/api/events/:eventId/attendees/:attendeeId/send-email', async (req, re
 // PUBLIC REGISTRATION & PENDING APPROVAL ROUTE
 // ==========================================
 
-// Public self-registration
+// Public self-registration (Ajustado para soportar position)
 app.post('/api/public/events/:eventId/register', async (req, res) => {
-    const { room_id, first_name, last_name, email, phone, company, payment_method } = req.body;
+    const { room_id, session_id, first_name, last_name, email, phone, company, position, payment_method } = req.body;
     const event_id = req.params.eventId;
 
     if (!room_id || !first_name || !last_name) {
@@ -627,10 +637,10 @@ app.post('/api/public/events/:eventId/register', async (req, res) => {
             }
         }
 
-        if (email && req.body.session_id) {
+        if (email && session_id) {
             const targetSession = await db.get(
                 `SELECT name FROM sessions WHERE id = ?`,
-                [req.body.session_id]
+                [session_id]
             );
 
             if (targetSession) {
@@ -656,9 +666,9 @@ app.post('/api/public/events/:eventId/register', async (req, res) => {
         const qr_code = crypto.createHash('md5').update(id + event_id + Date.now().toString()).digest('hex');
 
         await db.run(
-            `INSERT INTO attendees (id, event_id, room_id, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-            [id, event_id, room_id, first_name, last_name, email, phone || '', company || 'No Aplica', payment_method || 'Tarjeta', qr_code]
+            `INSERT INTO attendees (id, event_id, room_id, session_id, first_name, last_name, email, phone, company, position, payment_method, qr_code, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            [id, event_id, room_id, session_id || null, first_name, last_name, email, phone || '', company || 'No Aplica', position || '', payment_method || 'Tarjeta', qr_code]
         );
         res.json({ success: true, message: 'Registro exitoso, en espera de aprobación.', attendeeId: id });
     } catch (err) {
@@ -666,9 +676,9 @@ app.post('/api/public/events/:eventId/register', async (req, res) => {
     }
 });
 
-// Registro público para MÚLTIPLES charlas simultáneas con QR Único Global
+// Registro público para MÚLTIPLES charlas simultáneas (Ajustado para inyectar position en bucle)
 app.post('/api/public/events/:eventId/register-multiple', async (req, res) => {
-    const { selected_sessions, ci, first_name, last_name, email, phone, company, payment_method } = req.body;
+    const { selected_sessions, ci, first_name, last_name, email, phone, company, position, payment_method } = req.body;
     const event_id = req.params.eventId;
 
     if (!Array.isArray(selected_sessions) || selected_sessions.length === 0 || !first_name || !last_name) {
@@ -717,9 +727,7 @@ app.post('/api/public/events/:eventId/register-multiple', async (req, res) => {
             }
         }
 
-        // Generamos UN SOLO QR basado en el email y el evento para este asistente
         const shared_qr_code = crypto.createHash('md5').update(email.toLowerCase() + event_id).digest('hex');
-
         let firstInsertedId = null;
 
         for (let currentSession of targetSessions) {
@@ -727,8 +735,8 @@ app.post('/api/public/events/:eventId/register-multiple', async (req, res) => {
             if (!firstInsertedId) firstInsertedId = attendeeRecordId;
 
             await db.run(
-                `INSERT INTO attendees (id, event_id, room_id, session_id, ci, first_name, last_name, email, phone, company, payment_method, qr_code, status) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+                `INSERT INTO attendees (id, event_id, room_id, session_id, ci, first_name, last_name, email, phone, company, position, payment_method, qr_code, status) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
                 [
                     attendeeRecordId,
                     event_id,
@@ -740,8 +748,9 @@ app.post('/api/public/events/:eventId/register-multiple', async (req, res) => {
                     email,
                     phone || '',
                     company || 'No Aplica',
+                    position || '', // 👉 Guardamos la variable position recibida
                     payment_method || 'Tarjeta',
-                    shared_qr_code // Todas las filas guardan el MISMO código QR
+                    shared_qr_code
                 ]
             );
         }
@@ -771,10 +780,9 @@ app.get('/api/public/qr/:qrCode.png', async (req, res) => {
     }
 });
 
-// Get attendee info via QR Code (MD5) - LISTA COMPLETA DE CHARLAS
+// Get attendee info via QR Code (MD5) - LISTA COMPLETA DE CHARLAS (Mapea a.position)
 app.get('/api/public/attendee/:qrCode', async (req, res) => {
     try {
-        // Usamos db.all para traer TODAS las inscripciones de este QR
         const attendeeRows = await db.all(`
             SELECT a.id as attendee_row_id, a.*, r.name as room_name, e.name as event_name, e.access_code as event_access_code,
                    s.name as session_name, s.speaker, s.session_date, s.start_time, s.end_time
@@ -790,19 +798,20 @@ app.get('/api/public/attendee/:qrCode', async (req, res) => {
             return res.status(404).json({ success: false, message: 'QR Code inválido o asistente no encontrado' });
         }
 
-        // Agrupamos la información personal común (de la primera fila)
         const userInfo = {
             first_name: attendeeRows[0].first_name,
             last_name: attendeeRows[0].last_name,
+            ci: attendeeRows[0].ci,
             email: attendeeRows[0].email,
+            company: attendeeRows[0].company,
+            position: attendeeRows[0].position, // 👉 Mapeamos el cargo en el objeto principal
             event_name: attendeeRows[0].event_name,
             event_id: attendeeRows[0].event_id,
             event_access_code: attendeeRows[0].event_access_code
         };
 
-        // Mapeamos el itinerario de charlas con sus IDs individuales
         const sessions = attendeeRows.map(row => ({
-            attendee_row_id: row.attendee_row_id, // 👉 EL ID INDIVIDUAL PARA MARCAR LLEGADA
+            attendee_row_id: row.attendee_row_id,
             session_name: row.session_name || 'Charla General',
             speaker: row.speaker || '',
             room_name: row.room_name,
@@ -819,67 +828,13 @@ app.get('/api/public/attendee/:qrCode', async (req, res) => {
     }
 });
 
-// ====================================================================
-// 🎯 NUEVO ENDPOINT PARA EL ESCÁNER: BUSCA AL USUARIO Y SU ITINERARIO
-// ====================================================================
-app.get('/api/events/:eventId/scan-lookup/:qrCode', async (req, res) => {
-    const { eventId, qrCode } = req.params;
-
-    try {
-        // Traemos todas las filas (charlas) asociadas a este QR en este evento
-        const attendeeRows = await db.all(
-            `SELECT a.id as attendee_row_id, a.first_name, a.last_name, a.ci, a.email, a.has_arrived, a.arrival_time, 
-                    s.name as session_name, s.speaker, s.session_date, s.start_time, s.end_time,
-                    r.name as room_name
-             FROM attendees a
-             JOIN sessions s ON a.session_id = s.id
-             JOIN rooms r ON a.room_id = r.id
-             WHERE a.qr_code = ? AND a.event_id = ?
-             ORDER BY s.session_date ASC, s.start_time ASC`,
-            [qrCode, eventId]
-        );
-
-        if (!attendeeRows || attendeeRows.length === 0) {
-            return res.status(404).json({ success: false, message: 'QR no encontrado o no tiene charlas asignadas.' });
-        }
-
-        // Extraemos los datos personales comunes (de la primera fila)
-        const userInfo = {
-            first_name: attendeeRows[0].first_name,
-            last_name: attendeeRows[0].last_name,
-            ci: attendeeRows[0].ci,
-            email: attendeeRows[0].email
-        };
-
-        // Mapeamos el itinerario de charlas con su ID de fila individual
-        const sessionsList = attendeeRows.map(row => ({
-            attendee_row_id: row.attendee_row_id, // 👉 ID INDIVIDUAL PARA MARCAR LA LLEGADA
-            session_name: row.session_name,
-            speaker: row.speaker,
-            room_name: row.room_name,
-            session_date: row.session_date,
-            start_time: row.start_time,
-            end_time: row.end_time,
-            has_arrived: row.has_arrived,
-            arrival_time: row.arrival_time
-        }));
-
-        res.json({ success: true, user: userInfo, sessions: sessionsList });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ====================================================================
-// 🎯 CORRECCIÓN CLAVE 2: ENDPOINT DEL ESCÁNER AGRUPADO
-// ====================================================================
-// Buscar información del asistente y TODAS sus charlas mediante el QR (Para el escáner)
+// Endpoint único agrupado para la consulta en puerta a través del escáner
 app.get('/api/events/:eventId/scan-lookup/:qrCode', async (req, res) => {
     const { eventId, qrCode } = req.params;
 
     try {
         const attendeeRows = await db.all(
-            `SELECT a.id as attendee_row_id, a.first_name, a.last_name, a.ci, a.email, a.has_arrived, a.arrival_time, 
+            `SELECT a.id as attendee_row_id, a.first_name, a.last_name, a.ci, a.email, a.company, a.position, a.has_arrived, a.arrival_time, 
                     s.name as session_name, s.speaker, s.session_date, s.start_time, s.end_time,
                     r.name as room_name
              FROM attendees a
@@ -898,7 +853,9 @@ app.get('/api/events/:eventId/scan-lookup/:qrCode', async (req, res) => {
             first_name: attendeeRows[0].first_name,
             last_name: attendeeRows[0].last_name,
             ci: attendeeRows[0].ci,
-            email: attendeeRows[0].email
+            email: attendeeRows[0].email,
+            company: attendeeRows[0].company,
+            position: attendeeRows[0].position // 👉 Pasamos también el cargo a la puerta
         };
 
         const sessionsList = attendeeRows.map(row => ({

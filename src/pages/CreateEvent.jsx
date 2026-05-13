@@ -170,7 +170,7 @@ const CreateEvent = () => {
                             </div>
 
                             <div className="form-group" style={{ marginTop: '1rem' }}>
-                                <label>Logo del Evento (Opcional)</label>
+                                <label>Logo del Evento  </label>
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -180,7 +180,7 @@ const CreateEvent = () => {
                             </div>
 
                             <div className="form-group" style={{ marginTop: '1rem' }}>
-                                <label>Mensaje Personalizado (Opcional)</label>
+                                <label>Mensaje Personalizado  </label>
                                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 0.5rem 0' }}>
                                     Usa <strong>{'{nombre}'}</strong>, <strong>{'{sala}'}</strong> o <strong>{'{qr}'}</strong> para que el asistente reciba el mensaje adaptado a él.
                                 </p>

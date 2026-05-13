@@ -14,7 +14,7 @@ const PublicRegistration = () => {
     const [submitting, setSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
 
-    // 1. MODIFICAMOS EL ESTADO PARA SOPORTAR MÚLTIPLES CHARLAS
+    // 👉 1. MODIFICAMOS EL ESTADO INICIAL PARA SOPORTAR CARGO (position)
     const [formData, setFormData] = useState({
         first_name: '',
         last_name: '',
@@ -22,8 +22,9 @@ const PublicRegistration = () => {
         email: '',
         phone: '',
         company: 'No Aplica',
+        position: '', // <-- Inicializamos el campo Cargo
         payment_method: 'Efectivo',
-        selected_sessions: [] // <-- Arreglo que guardará los IDs seleccionados
+        selected_sessions: []
     });
 
     const [companies, setCompanies] = useState([]);
@@ -58,7 +59,6 @@ const PublicRegistration = () => {
         if (eventId) fetchEventDetails();
     }, [eventId]);
 
-    // Manejador para agregar o quitar sesiones del arreglo
     const handleSessionToggle = (sessionId) => {
         const currentSelected = formData.selected_sessions;
         if (currentSelected.includes(sessionId)) {
@@ -77,7 +77,6 @@ const PublicRegistration = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validación: Debe elegir al menos una charla
         if (formData.selected_sessions.length === 0) {
             alert('Por favor selecciona al menos una charla / curso al que desees asistir.');
             return;
@@ -85,11 +84,11 @@ const PublicRegistration = () => {
 
         setSubmitting(true);
         try {
-            // Enviamos la petición POST al nuevo endpoint o al existente adaptado
             const res = await axios.post(`${API_URL}/public/events/${eventId}/register-multiple`, formData);
             if (res.data.success) {
                 setSuccessMessage('¡Registro Exitoso! Tus solicitudes han sido enviadas para aprobación.');
-                setFormData({ first_name: '', last_name: '', ci: '', email: '', phone: '', company: 'No Aplica', payment_method: 'Efectivo', selected_sessions: [] });
+                // 👉 Reseteo incluye position: ''
+                setFormData({ first_name: '', last_name: '', ci: '', email: '', phone: '', company: 'No Aplica', position: '', payment_method: 'Efectivo', selected_sessions: [] });
             }
         } catch (err) {
             console.error('Registration error', err);
@@ -99,7 +98,6 @@ const PublicRegistration = () => {
         }
     };
 
-    // Función auxiliar para obtener el nombre de la sala
     const getRoomName = (roomId) => {
         const r = rooms.find(room => room.id === roomId);
         return r ? `${r.name} (${r.conference_name})` : '';
@@ -141,7 +139,7 @@ const PublicRegistration = () => {
                     </div>
 
                     <div className="form-group">
-                        <label>C.I. (Opcional)</label>
+                        <label>C.I.</label>
                         <input type="text" placeholder="Ej. 12.345.678" value={formData.ci} onChange={(e) => setFormData({ ...formData, ci: e.target.value })} />
                     </div>
 
@@ -156,7 +154,7 @@ const PublicRegistration = () => {
                     </div>
 
                     <div className="form-group">
-                        <label>Empresa (Opcional)</label>
+                        <label>Empresa</label>
                         <input list="companyList" name="company" placeholder="Ej. Mi Empresa C.A." value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} onFocus={(e) => { if (e.target.value === 'No Aplica') setFormData({ ...formData, company: '' }); }} />
                         <datalist id="companyList">
                             <option value="No Aplica" />
@@ -164,23 +162,32 @@ const PublicRegistration = () => {
                         </datalist>
                     </div>
 
-                    {/* 2. NUEVO COMPONENTE DE SELECCIÓN MÚLTIPLE DE CHARLAS */}
+                    {/* 👉 2. NUEVO CAMPO VISUAL: CARGO */}
+                    <div className="form-group">
+                        <label>Cargo (Opcional)</label>
+                        <input
+                            type="text"
+                            name="position"
+                            placeholder="nombre del cargo"
+                            value={formData.position}
+                            onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                        />
+                    </div>
+
                     <div className="form-group">
                         <label>Selecciona las Charlas / Cursos a los que asistirás:</label>
                         {sessions.length === 0 ? (
                             <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>No hay charlas configuradas en este evento.</p>
                         ) : (
-                            /* 1. El contenedor padre se queda completamente normal (apilado 1 por fila) */
                             <div className="sessions-checkbox-list" style={{ maxHeight: '300px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid #334155' }}>
                                 {sessions.map(s => {
                                     const isChecked = formData.selected_sessions.includes(s.id);
                                     return (
-                                        /* 2. Aplicamos la cuadrícula interna 1/5 y 4/5 al label */
                                         <label
                                             key={s.id}
                                             style={{
                                                 display: 'grid',
-                                                gridTemplateColumns: '1fr 4fr', // <-- AQUÍ ESTÁ LA PROPORCIÓN: 1/5 y 4/5
+                                                gridTemplateColumns: '1fr 4fr',
                                                 alignItems: 'flex-start',
                                                 gap: '0.8rem',
                                                 padding: '0.6rem',
@@ -190,7 +197,6 @@ const PublicRegistration = () => {
                                                 borderRadius: '4px'
                                             }}
                                         >
-                                            {/* 3. El espacio del 1/5 (20%) para el checkbox */}
                                             <div style={{ textAlign: 'center', marginTop: '0.2rem' }}>
                                                 <input
                                                     type="checkbox"
@@ -200,7 +206,6 @@ const PublicRegistration = () => {
                                                 />
                                             </div>
 
-                                            {/* 4. El espacio de los 4/5 (80%) para la información */}
                                             <div>
                                                 <strong style={{ color: 'white', display: 'block' }}>{s.name}</strong>
                                                 <span style={{ fontSize: '0.85rem', color: '#94a3b8', display: 'block' }}>Ponente: {s.speaker} | Sala: {getRoomName(s.room_id)}</span>

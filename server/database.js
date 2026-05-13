@@ -8,9 +8,11 @@ let dbHelper = {};
 if (isPostgres) {
     console.log('Detected DATABASE_URL. Using PostgreSQL adapter.');
     const { Pool } = require('pg');
+
+    // 👉 APAGAMOS EL SSL PARA QUE COMPATIBILICE CON EL SOCKET DE CPANEL
     const pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false } // Needed for platforms like Render
+        ssl: false
     });
 
     pool.on('connect', () => {
