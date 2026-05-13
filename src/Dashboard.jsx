@@ -423,7 +423,7 @@ const Dashboard = () => {
 
                             {/* 👉 NUEVO CAMPO: Cargo del asistente */}
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Cargo (Opcional)</label>
+                                <label style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Cargo   </label>
                                 <input
                                     type="text"
                                     placeholder="nombre del cargo"

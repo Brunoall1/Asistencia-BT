@@ -739,7 +739,7 @@ const AttendeeList = () => {
                             </div>
 
                             <div className="form-group">
-                                <label>Empresa (Opcional)</label>
+                                <label>Empresa   </label>
                                 <input
                                     list="companyListAdmin"
                                     name="company"
@@ -760,7 +760,7 @@ const AttendeeList = () => {
 
                             {/* 👉 NUEVO CAMPO: CARGO */}
                             <div className="form-group">
-                                <label>Cargo (Opcional)</label>
+                                <label>Cargo   </label>
                                 <input
                                     type="text"
                                     name="position"

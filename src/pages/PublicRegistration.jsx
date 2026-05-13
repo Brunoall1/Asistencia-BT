@@ -164,7 +164,7 @@ const PublicRegistration = () => {
 
                     {/* 👉 2. NUEVO CAMPO VISUAL: CARGO */}
                     <div className="form-group">
-                        <label>Cargo (Opcional)</label>
+                        <label>Cargo   </label>
                         <input
                             type="text"
                             name="position"
